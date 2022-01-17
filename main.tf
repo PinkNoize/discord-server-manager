@@ -4,8 +4,17 @@ terraform {
       source  = "hashicorp/google"
       version = "4.5.0"
     }
+    random = {
+      source = "hashicorp/random"
+      version = "3.1.0"
+    }
   }
 }
+
+provider "random" {
+  # Configuration options
+}
+
 
 provider "google" {
   project = var.project
