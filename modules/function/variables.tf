@@ -2,6 +2,7 @@ variable "project" {}
 variable "region" {}
 variable "function_name" {}
 variable "function_entry_point" {}
+variable "source" {}
 variable "environment_variables" {}
 variable "service_account_email" {
     default = null

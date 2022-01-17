@@ -1,12 +1,11 @@
 locals {
   timestamp = formatdate("YYMMDDhhmmss", timestamp())
-	root_dir = abspath("../")
 }
 
 # Compress source code
 data "archive_file" "source" {
   type        = "zip"
-  source_dir  = local.root_dir
+  source_dir  = var.source
   output_path = "/tmp/function-${local.timestamp}.zip"
 }
 
