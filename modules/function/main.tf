@@ -5,7 +5,7 @@ locals {
 # Compress source code
 data "archive_file" "source" {
   type        = "zip"
-  source_dir  = var.source
+  source_dir  = var.source_dir
   output_path = "/tmp/function-${local.timestamp}.zip"
 }
 
