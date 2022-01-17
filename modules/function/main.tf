@@ -57,8 +57,3 @@ resource "google_cloudfunctions_function" "function" {
   service_account_email = var.service_account_email
   event_trigger         = var.event_trigger
 }
-
-data "google_iam_policy" "admin" {
-  binding {
-  }
-}

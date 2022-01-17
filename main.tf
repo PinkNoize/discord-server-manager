@@ -12,12 +12,12 @@ provider "google" {
   region  = var.region
 }
 
-resource "google_pubsub_topic" "command-topic" {
+resource "google_pubsub_topic" "command_topic" {
   name = "command-topic"
 }
 
 resource "google_service_account" "service_account" {
-  account_id   = "command-function-service-account"
+  account_id   = "command-func-service-acc"
   display_name = "Command Function Account"
 }
 
