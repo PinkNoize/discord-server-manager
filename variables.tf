@@ -1,6 +1,4 @@
-variable "project" {
-  default = "discord-server-manager"
-}
+variable "project" {}
 variable "region" {
   default = "us-west-2"
 }

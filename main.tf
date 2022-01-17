@@ -37,7 +37,7 @@ module "command_function" {
   source_dir            = "./server-manager"
   service_account_email = google_service_account.service_account.email
   event_type            = "google.pubsub.topic.publish"
-  event_resource        = "${google_pubsub_topic.command_topic.name}"
+  event_resource        = "${google_pubsub_topic.command_topic.id}"
 }
 
 resource "google_app_engine_application" "app" {
