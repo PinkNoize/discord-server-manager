@@ -15,7 +15,6 @@ provider "random" {
   # Configuration options
 }
 
-
 provider "google" {
   project = var.project
   region  = var.region
@@ -28,6 +27,15 @@ provider "google" {
 
 resource "google_pubsub_topic" "command_topic" {
   name = "command-topic"
+}
+
+#Enable Compute API
+resource "google_project_service" "comp" {
+  project = var.project
+  service = "compute.googleapis.com"
+
+  disable_dependent_services = true
+  disable_on_destroy         = false
 }
 
 # Cloud Function Resources
