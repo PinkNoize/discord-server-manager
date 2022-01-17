@@ -12,3 +12,9 @@ variable "trigger_http" {
 variable "event_trigger" {
     default = null
 }
+variable "event_type" {
+    default = null
+}
+variable "event_resource" {
+    default = null
+}

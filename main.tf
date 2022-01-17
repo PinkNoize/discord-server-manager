@@ -35,10 +35,8 @@ module "command_function" {
     "BASE_DOMAIN"      = var.base_domain
   }
   service_account_email = google_service_account.service_account.email
-  event_trigger = {
-    event_type = "google.pubsub.topic.publish"
-    resource   = google_pubsub_topic.command_topic.name
-  }
+  event_type = "google.pubsub.topic.publish"
+  event_resource   = google_pubsub_topic.command_topic.name
 }
 
 resource "google_app_engine_application" "app" {
