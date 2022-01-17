@@ -21,6 +21,11 @@ provider "google" {
   region  = var.region
 }
 
+provider "google" {
+  alias = "dns"
+  project = var.dns_project_id
+}
+
 resource "google_pubsub_topic" "command_topic" {
   name = "command-topic"
 }
@@ -32,10 +37,10 @@ resource "random_id" "id" {
 }
 
 resource "google_project_iam_custom_role" "command_func_role" {
-  role_id     = "command-func-role-${random_id.id.hex}"
+  role_id     = "cmdfunc_role_${random_id.id.hex}"
   title       = "Command Func Role"
   description = ""
-  permissions = []
+  permissions = ["datastore.databases.get"]
 }
 
 resource "google_service_account" "service_account" {
@@ -43,16 +48,26 @@ resource "google_service_account" "service_account" {
   display_name = "Command Function Account"
 }
 
-data "google_iam_policy" "cmd_func" {
-  binding {
-    role = google_project_iam_custom_role.command_func_role.id
-    members = []
-  }
+resource "google_service_account_iam_binding" "custom-role-iam" {
+  role    = google_project_iam_custom_role.command_func_role.id
+  members = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 
-resource "google_service_account_iam_policy" "cmd-acc-iam" {
-  service_account_id = google_service_account.service_account.name
-  policy_data        = data.google_iam_policy.cmd_func.policy_data
+resource "google_service_account_iam_binding" "firestore-iam" {
+  role    = "roles/datastore.user"
+  members = ["serviceAccount:${google_service_account.service_account.email}"]
+}
+
+resource "google_service_account_iam_binding" "compute-iam" {
+  role    = "roles/compute.admin"
+  members = ["serviceAccount:${google_service_account.service_account.email}"]
+}
+
+# Add permissions to access DNS project
+resource "google_service_account_iam_binding" "dns-iam" {
+  provider = google.dns
+  role    = "roles/server_manager_dns_role"
+  members = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 
 module "command_function" {
