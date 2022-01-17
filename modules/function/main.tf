@@ -55,7 +55,7 @@ resource "google_cloudfunctions_function" "function" {
   entry_point           = var.function_entry_point
   environment_variables = var.environment_variables
   service_account_email = var.service_account_email
-  event_trigger         = {
+  event_trigger {
     event_type = var.event_type
     resource   = var.event_resource
   }

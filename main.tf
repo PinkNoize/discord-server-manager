@@ -22,11 +22,11 @@ resource "google_service_account" "service_account" {
 }
 
 module "command_function" {
-  source               = "./modules/function"
-  project              = var.project
-  region               = var.region
-  function_name        = "command-function"
-  function_entry_point = "CommandPubSub"
+  source                = "./modules/function"
+  project               = var.project
+  region                = var.region
+  function_name         = "command-function"
+  function_entry_point  = "CommandPubSub"
   environment_variables = {
     "PROJECT_ID"       = var.project
     "PROJECT_ZONE"     = var.zone
@@ -35,8 +35,8 @@ module "command_function" {
     "BASE_DOMAIN"      = var.base_domain
   }
   service_account_email = google_service_account.service_account.email
-  event_type = "google.pubsub.topic.publish"
-  event_resource   = google_pubsub_topic.command_topic.name
+  event_type            = "google.pubsub.topic.publish"
+  event_resource        = "${google_pubsub_topic.command_topic.name}"
 }
 
 resource "google_app_engine_application" "app" {
