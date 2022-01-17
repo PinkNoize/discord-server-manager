@@ -67,11 +67,11 @@ resource "google_project_iam_member" "compute-iam" {
 }
 
 # Add permissions to access DNS project
-resource "google_project_iam_member" "dns-iam" {
+resource "google_project_iam_binding" "dns-iam" {
   provider = google.dns
   project  = var.dns_project_id
   role     = "roles/server_manager_dns_role"
-  member   = "serviceAccount:${google_service_account.service_account.email}"
+  members  = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 
 module "command_function" {
