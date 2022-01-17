@@ -48,24 +48,28 @@ resource "google_service_account" "service_account" {
   display_name = "Command Function Account"
 }
 
-resource "google_service_account_iam_binding" "custom-role-iam" {
+resource "google_project_iam_member" "custom-role-iam" {
+  project = var.project
   role    = google_project_iam_custom_role.command_func_role.id
   members = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 
-resource "google_service_account_iam_binding" "firestore-iam" {
+resource "google_project_iam_member" "firestore-iam" {
+  project = var.project
   role    = "roles/datastore.user"
   members = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 
-resource "google_service_account_iam_binding" "compute-iam" {
+resource "google_project_iam_member" "compute-iam" {
+  project = var.project
   role    = "roles/compute.admin"
   members = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 
 # Add permissions to access DNS project
-resource "google_service_account_iam_binding" "dns-iam" {
+resource "google_project_iam_member" "dns-iam" {
   provider = google.dns
+  project = var.dns_project_id
   role    = "roles/server_manager_dns_role"
   members = ["serviceAccount:${google_service_account.service_account.email}"]
 }
