@@ -16,9 +16,34 @@ resource "google_pubsub_topic" "command_topic" {
   name = "command-topic"
 }
 
+# Cloud Function Resources
+
+resource "random_id" "id" {
+	  byte_length = 8
+}
+
+resource "google_project_iam_custom_role" "command_func_role" {
+  role_id     = "command-func-role-${random_id.id.hex}"
+  title       = "Command Func Role"
+  description = ""
+  permissions = []
+}
+
 resource "google_service_account" "service_account" {
   account_id   = "command-func-service-acc"
   display_name = "Command Function Account"
+}
+
+data "google_iam_policy" "cmd_func" {
+  binding {
+    role = google_project_iam_custom_role.command_func_role.id
+    members = []
+  }
+}
+
+resource "google_service_account_iam_policy" "cmd-acc-iam" {
+  service_account_id = google_service_account.service_account.name
+  policy_data        = data.google_iam_policy.cmd_func.policy_data
 }
 
 module "command_function" {
@@ -40,6 +65,7 @@ module "command_function" {
   event_resource        = "${google_pubsub_topic.command_topic.id}"
 }
 
+# Enable Firestore
 resource "google_app_engine_application" "app" {
   project       = var.project
   location_id   = var.region

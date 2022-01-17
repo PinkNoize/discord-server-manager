@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/compute/v1"
@@ -54,10 +56,10 @@ type PubSubMessage struct {
 }
 
 type createServerArgs struct {
-	Name        *string   `json:"name"`
-	Subdomain   *string   `json:"subdomain"`
-	MachineType *string   `json:"machineType"`
-	Ports       *[]uint16 `json:"ports"`
+	Name        *string `json:"name"`
+	Subdomain   *string `json:"subdomain"`
+	MachineType *string `json:"machineType"`
+	Ports       *string `json:"ports"`
 }
 type deleteServerArgs struct {
 	Name *string `json:"name"`
@@ -133,12 +135,20 @@ func commandCreateServer(ctx context.Context, args *createServerArgs) (*server, 
 	if args.Ports == nil {
 		return nil, fmt.Errorf("ports not specified")
 	}
+	ports := []uint16{}
+	for _, port := range strings.Fields(*args.Ports) {
+		tmp, err := strconv.ParseUint(port, 10, 16)
+		if err != nil {
+			return nil, fmt.Errorf("parse port failed: %v", err)
+		}
+		ports = append(ports, uint16(tmp))
+	}
 	return CreateServer(
 		ctx,
 		*args.Name,
 		*args.Subdomain,
 		*args.MachineType,
-		*args.Ports,
+		ports,
 	)
 }
 
