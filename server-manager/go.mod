@@ -1,4 +1,4 @@
-module server-manager
+module github.com/PinkNoize/discord-server-manager/server-manager
 
 go 1.16
 
