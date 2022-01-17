@@ -70,7 +70,7 @@ resource "google_project_iam_member" "compute-iam" {
 resource "google_project_iam_binding" "dns-iam" {
   provider = google.dns
   project  = var.dns_project_id
-  role     = "roles/server_manager_dns_role"
+  role     = "projects/${var.dns_project_id}/roles/server_manager_dns_role"
   members  = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 

@@ -9,8 +9,6 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type ServerStatus uint
@@ -37,8 +35,11 @@ type server struct {
 }
 
 func CreateServer(ctx context.Context, name, subdomain, machineType string, ports []uint16) (*server, error) {
-	_, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
-	if err == nil || status.Code(err) != codes.NotFound {
+	tmpDoc, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Doc %v", name)
+	}
+	if tmpDoc.Exists() {
 		return nil, fmt.Errorf("server %v already exists", name)
 	}
 
