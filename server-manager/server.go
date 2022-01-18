@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 
 	"github.com/google/uuid"
 	"google.golang.org/api/compute/v1"
@@ -62,6 +61,7 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	}
 	// Use to delete in case of error
 	serverDocUndo := func() {
+		log.Printf("Undo doc creation of %v", name)
 		if _, err = serverDoc.Delete(ctx); err != nil {
 			log.Printf("ERROR: Failed to delete document %v in Servers", name)
 		}
@@ -94,7 +94,7 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 				AutoDelete: true,
 				InitializeParams: &compute.AttachedDiskInitializeParams{
 					SourceImage: sourceImage,
-					DiskType:    "pd-standard",
+					DiskType:    fmt.Sprintf("zones/%v/diskTypes/pd-standard", projectZone),
 				},
 			},
 		},
@@ -163,7 +163,7 @@ func (s *server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Server %v started", s.name)
+	log.Printf("Server %v starting", s.name)
 	return nil
 }
 
@@ -239,7 +239,7 @@ func generateServerTag(name string) string {
 	return fmt.Sprintf("server-%v", name)
 }
 
-func (s *server) AddUserIP(ctx context.Context, user string, ip net.IP) error {
+func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
 	fwname := fmt.Sprintf("%v-%v-%v", s.name, user, uuid.NewString())
 	serverTag := generateServerTag(s.name)
 
@@ -261,7 +261,7 @@ func (s *server) AddUserIP(ctx context.Context, user string, ip net.IP) error {
 				},
 			},
 			Name:         fwname,
-			SourceRanges: []string{fmt.Sprintf("%v/32", ip.String())},
+			SourceRanges: []string{fmt.Sprintf("%v/32", ip)},
 			TargetTags:   []string{serverTag},
 		},
 	).Do()
@@ -272,7 +272,7 @@ func (s *server) AddUserIP(ctx context.Context, user string, ip net.IP) error {
 	return nil
 }
 
-func (s *server) ServerIP(ctx context.Context) (*string, error) {
+func (s *server) ServerIP(ctx context.Context) (string, error) {
 	// Get server IP
 	instance, err := computeClient.Instances.Get(
 		projectID,
@@ -280,11 +280,11 @@ func (s *server) ServerIP(ctx context.Context) (*string, error) {
 		s.name,
 	).Context(ctx).Do()
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("failed to get instance IP %v: %v", s.name, err)
 	}
 
 	if instance.Status != "RUNNING" {
-		return nil, fmt.Errorf("%v not running", s.name)
+		return "", fmt.Errorf("%v not running", s.name)
 	}
 
 	var extIP *string = nil
@@ -298,14 +298,19 @@ ifaceLoop:
 		}
 	}
 	if extIP == nil {
-		return nil, fmt.Errorf("%v has not external interface", s.name)
+		return "", fmt.Errorf("%v has no external interface", s.name)
 	}
-	return extIP, nil
+	return *extIP, nil
 }
 
-func (s *server) CreateDNSRecord(ctx context.Context, ip string) error {
+func (s *server) CreateDNSRecord(ctx context.Context) error {
+	// Get server IP
+	ip, err := s.ServerIP(ctx)
+	if err != nil {
+		return fmt.Errorf("CreateDNSRecord: %v", err)
+	}
 	// Set DNS record
-	_, err := rrClient.Create(
+	_, err = rrClient.Create(
 		dnsProjectID,
 		dnsZone,
 		&dns.ResourceRecordSet{
@@ -320,7 +325,7 @@ func (s *server) CreateDNSRecord(ctx context.Context, ip string) error {
 	return err
 }
 
-func (s *server) DeleteDNSRecord(ctx context.Context, ip string) error {
+func (s *server) DeleteDNSRecord(ctx context.Context) error {
 	// Set DNS record
 	_, err := rrClient.Delete(
 		dnsProjectID,

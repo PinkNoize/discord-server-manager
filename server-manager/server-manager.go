@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/compute/v1"
@@ -70,6 +71,11 @@ type startServerArgs struct {
 type stopServerArgs struct {
 	Name *string `json:"name"`
 }
+type addUserIPArgs struct {
+	Name *string `json:"name"`
+	IP   *string `json:"ip"`
+	User *string `json:"user"`
+}
 
 // Handles server commands.
 func CommandPubSub(ctx context.Context, m PubSubMessage) error {
@@ -115,6 +121,16 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 		err = commandStopServer(ctx, &args)
 		if err != nil {
 			return fmt.Errorf("stop Server failed: %v", err)
+		}
+	case "add-user-ip":
+		args := addUserIPArgs{}
+		err := json.Unmarshal(m.Attributes, &args)
+		if err != nil {
+			return fmt.Errorf("error parsing addUserIPArgs: %v", err)
+		}
+		err = commandAddUserIP(ctx, &args)
+		if err != nil {
+			return fmt.Errorf("AddUserIP failed: %v", err)
 		}
 	default:
 		return fmt.Errorf("command %v not recognized", command)
@@ -181,12 +197,28 @@ func commandStartServer(ctx context.Context, args *startServerArgs) error {
 	// Check if the server is already running
 	running, err := server.IsRunning(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get %v status", args.Name)
+		return fmt.Errorf("failed to get %v status: %v", args.Name, err)
 	}
 	if running {
 		return fmt.Errorf("server %v already running", args.Name)
 	}
-	return server.Start(ctx)
+	err = server.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start server %v: %v", args.Name, err)
+	}
+	// Wait for server to have an IP
+	for i := 0; i < 20; i++ {
+		_, err := server.ServerIP(ctx)
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	err = server.CreateDNSRecord(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create DNS record: %v", err)
+	}
+	return err
 }
 
 func commandStopServer(ctx context.Context, args *stopServerArgs) error {
@@ -200,10 +232,37 @@ func commandStopServer(ctx context.Context, args *stopServerArgs) error {
 	// Check if the server is already stopped
 	running, err := server.IsStopped(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get %v status", args.Name)
+		return fmt.Errorf("failed to get %v status: %v", args.Name, err)
 	}
 	if running {
 		return fmt.Errorf("server %v already stopped", args.Name)
 	}
+	// Delete DNS Record
+	err = server.DeleteDNSRecord(ctx)
+	if err != nil {
+		fmt.Printf("Failed to delete DNS record %v: %v", server.DnsName(), err)
+	}
+	// Stop Server
 	return server.Stop(ctx)
+}
+
+func commandAddUserIP(ctx context.Context, args *addUserIPArgs) error {
+	if args.Name == nil {
+		return fmt.Errorf("name not specified")
+	}
+	if args.IP == nil {
+		return fmt.Errorf("ip not specified")
+	}
+	if args.User == nil {
+		return fmt.Errorf("user not specified")
+	}
+	server, err := ServerFromName(ctx, *args.Name)
+	if err != nil {
+		return fmt.Errorf("serverFromName failed: %v", err)
+	}
+	err = server.AddUserIP(ctx, *args.User, *args.IP)
+	if err != nil {
+		return fmt.Errorf("failed AddUserIP: %v", err)
+	}
+	return nil
 }
