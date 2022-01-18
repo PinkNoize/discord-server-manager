@@ -145,11 +145,14 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 
 func ServerFromName(ctx context.Context, name string) (*server, error) {
 	serverDoc, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
-	if err != nil || !serverDoc.Exists() {
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Doc %v: %v", name, err)
+	}
+	if !serverDoc.Exists() {
 		return nil, fmt.Errorf("server %v does not exist", name)
 	}
 	server := server{}
-	err = serverDoc.DataTo(server)
+	err = serverDoc.DataTo(&server)
 	server.Name = name
 	if err != nil {
 		return nil, err
