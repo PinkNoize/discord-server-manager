@@ -232,10 +232,10 @@ func commandStopServer(ctx context.Context, args *stopServerArgs) error {
 	// Check if the server is already stopped
 	running, err := server.IsStopped(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get %v status: %v", args.Name, err)
+		return fmt.Errorf("failed to get %v status: %v", *args.Name, err)
 	}
 	if running {
-		return fmt.Errorf("server %v already stopped", args.Name)
+		return fmt.Errorf("server %v already stopped", *args.Name)
 	}
 	// Delete DNS Record
 	err = server.DeleteDNSRecord(ctx)

@@ -218,6 +218,7 @@ func (s *server) Status(ctx context.Context) (ServerStatus, error) {
 		return UNKNOWN, err
 	}
 	status := instance.Status
+	log.Printf("server %v status: %v", s.Name, status)
 	switch status {
 	case "DEPROVISIONING":
 		return DEPROVISIONING, nil
@@ -353,8 +354,8 @@ func (s *server) IsStopped(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return status != STOPPED &&
-		status != STOPPING, nil
+	return status == STOPPED ||
+		status == STOPPING, nil
 }
 
 func (s *server) IsRunning(ctx context.Context) (bool, error) {
@@ -362,7 +363,7 @@ func (s *server) IsRunning(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return status != PROVISIONING &&
-		status != RUNNING &&
-		status != STAGING, nil
+	return status == PROVISIONING ||
+		status == RUNNING ||
+		status == STAGING, nil
 }
