@@ -29,10 +29,10 @@ const (
 const publicInterfaceName string = "External NAT"
 
 type server struct {
-	name        string
-	subdomain   string   `firestore:"subdomain"`
-	machineType string   `firestore:"machineType"`
-	ports       []uint16 `firestore:"ports"`
+	Name        string
+	Subdomain   string   `firestore:"subdomain"`
+	MachineType string   `firestore:"machineType"`
+	Ports       []uint16 `firestore:"ports"`
 }
 
 func CreateServer(ctx context.Context, name, subdomain, machineType string, ports []uint16) (*server, error) {
@@ -46,10 +46,10 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	}
 
 	server := server{
-		name:        name,
-		subdomain:   subdomain,
-		machineType: machineType,
-		ports:       ports,
+		Name:        name,
+		Subdomain:   subdomain,
+		MachineType: machineType,
+		Ports:       ports,
 	}
 
 	// Create database item
@@ -148,8 +148,9 @@ func ServerFromName(ctx context.Context, name string) (*server, error) {
 	if err != nil || serverDoc.Exists() {
 		return nil, fmt.Errorf("server %v does not exist", name)
 	}
-	server := server{name: name}
+	server := server{}
 	err = serverDoc.DataTo(server)
+	server.Name = name
 	if err != nil {
 		return nil, err
 	}
@@ -160,12 +161,12 @@ func (s *server) Start(ctx context.Context) error {
 	_, err := computeClient.Instances.Start(
 		projectID,
 		projectZone,
-		s.name,
+		s.Name,
 	).Context(ctx).Do()
 	if err != nil {
 		return err
 	}
-	log.Printf("Server %v starting", s.name)
+	log.Printf("Server %v starting", s.Name)
 	return nil
 }
 
@@ -173,12 +174,12 @@ func (s *server) Stop(ctx context.Context) error {
 	_, err := computeClient.Instances.Stop(
 		projectID,
 		projectZone,
-		s.name,
+		s.Name,
 	).Context(ctx).Do()
 	if err != nil {
 		return err
 	}
-	log.Printf("Server %v stopped", s.name)
+	log.Printf("Server %v stopped", s.Name)
 	return nil
 }
 
@@ -187,19 +188,19 @@ func (s *server) Delete(ctx context.Context) error {
 	_, err := computeClient.Instances.Delete(
 		projectID,
 		projectZone,
-		s.name,
+		s.Name,
 	).Context(ctx).Do()
 	if err != nil {
 		return err
 	}
-	log.Printf("Instance %v deleted", s.name)
+	log.Printf("Instance %v deleted", s.Name)
 
 	// Delete database entry
-	_, err = firestoreClient.Collection("Servers").Doc(s.name).Delete(ctx)
+	_, err = firestoreClient.Collection("Servers").Doc(s.Name).Delete(ctx)
 	if err != nil {
 		return err
 	}
-	log.Printf("Doc %v deleted in Collection Servers", s.name)
+	log.Printf("Doc %v deleted in Collection Servers", s.Name)
 
 	return nil
 }
@@ -208,7 +209,7 @@ func (s *server) Status(ctx context.Context) (ServerStatus, error) {
 	instance, err := computeClient.Instances.Get(
 		projectID,
 		projectZone,
-		s.name,
+		s.Name,
 	).Context(ctx).Do()
 	if err != nil {
 		return UNKNOWN, err
@@ -242,11 +243,11 @@ func generateServerTag(name string) string {
 }
 
 func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
-	fwname := fmt.Sprintf("%v-%v-%v", s.name, user, uuid.NewString())
-	serverTag := generateServerTag(s.name)
+	fwname := fmt.Sprintf("%v-%v-%v", s.Name, user, uuid.NewString())
+	serverTag := generateServerTag(s.Name)
 
 	var allowedPorts []string
-	for _, p := range s.ports {
+	for _, p := range s.Ports {
 		allowedPorts = append(allowedPorts, fmt.Sprintf("%v", p))
 	}
 	_, err := computeClient.Firewalls.Insert(
@@ -279,14 +280,14 @@ func (s *server) ServerIP(ctx context.Context) (string, error) {
 	instance, err := computeClient.Instances.Get(
 		projectID,
 		projectZone,
-		s.name,
+		s.Name,
 	).Context(ctx).Do()
 	if err != nil {
-		return "", fmt.Errorf("failed to get instance IP %v: %v", s.name, err)
+		return "", fmt.Errorf("failed to get instance IP %v: %v", s.Name, err)
 	}
 
 	if instance.Status != "RUNNING" {
-		return "", fmt.Errorf("%v not running", s.name)
+		return "", fmt.Errorf("%v not running", s.Name)
 	}
 
 	var extIP *string = nil
@@ -300,7 +301,7 @@ ifaceLoop:
 		}
 	}
 	if extIP == nil {
-		return "", fmt.Errorf("%v has no external interface", s.name)
+		return "", fmt.Errorf("%v has no external interface", s.Name)
 	}
 	return *extIP, nil
 }
@@ -341,7 +342,7 @@ func (s *server) DeleteDNSRecord(ctx context.Context) error {
 }
 
 func (s *server) DnsName() string {
-	return fmt.Sprintf("%v.%v", s.subdomain, baseDomain)
+	return fmt.Sprintf("%v.%v", s.Subdomain, baseDomain)
 }
 
 func (s *server) IsStopped(ctx context.Context) (bool, error) {
