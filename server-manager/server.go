@@ -36,6 +36,7 @@ type server struct {
 }
 
 func CreateServer(ctx context.Context, name, subdomain, machineType string, ports []uint16) (*server, error) {
+	// TODO: use the Create to check if doc already exists
 	_, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
 	if err != nil && status.Code(err) != codes.NotFound {
 		return nil, fmt.Errorf("failed to get Doc %v", name)
@@ -52,7 +53,8 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	}
 
 	// Create database item
-	serverDoc, _, err := firestoreClient.Collection("Servers").Add(
+	serverDoc := firestoreClient.Collection("Servers").Doc(name)
+	_, err = serverDoc.Create(
 		ctx,
 		server,
 	)
@@ -309,6 +311,7 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("CreateDNSRecord: %v", err)
 	}
+	log.Printf("Creating record: %v -> %v", s.DnsName(), ip)
 	// Set DNS record
 	_, err = rrClient.Create(
 		dnsProjectID,
@@ -326,6 +329,7 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 }
 
 func (s *server) DeleteDNSRecord(ctx context.Context) error {
+	log.Printf("Deleting record %v", s.DnsName())
 	// Set DNS record
 	_, err := rrClient.Delete(
 		dnsProjectID,
