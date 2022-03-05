@@ -296,10 +296,10 @@ func (s *server) ServerIP(ctx context.Context) (string, error) {
 
 	var extIP *string = nil
 ifaceLoop:
-	for _, iface := range instance.NetworkInterfaces {
-		for _, cfg := range iface.AccessConfigs {
+	for i := range instance.NetworkInterfaces {
+		for _, cfg := range instance.NetworkInterfaces[i].AccessConfigs {
 			if cfg.Name == publicInterfaceName {
-				extIP = &iface.NetworkIP
+				extIP = &(instance.NetworkInterfaces[i].NetworkIP)
 				break ifaceLoop
 			}
 		}
@@ -316,6 +316,21 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("CreateDNSRecord: %v", err)
 	}
+	// DEBUG
+	log.Printf("Listing Records in %v in %v", dnsZone, dnsProjectID)
+	resp, err := rrClient.List(
+		dnsProjectID,
+		dnsZone,
+	).Do()
+	if err != nil {
+		log.Printf("ListRecords: %v\n", err)
+	} else {
+		log.Printf("Record Sets:")
+		for _, set := range resp.Rrsets {
+			log.Printf("\t%v", set.Name)
+		}
+	}
+
 	log.Printf("Creating record: %v -> %v", s.DnsName(), ip)
 	// Set DNS record
 	_, err = rrClient.Create(

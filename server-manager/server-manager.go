@@ -28,7 +28,6 @@ var dnsClient *dns.Service
 var rrClient *dns.ResourceRecordSetsService
 
 func init() {
-	// My linter won't fuck off so I have to declare err
 	var err error
 	ctx := context.Background()
 	computeClient, err = compute.NewService(ctx)
@@ -181,7 +180,7 @@ func commandDeleteServer(ctx context.Context, args *deleteServerArgs) error {
 	if err != nil {
 		return err
 	} else if !stopped {
-		return fmt.Errorf("server %v must be stopped first", args.Name)
+		return fmt.Errorf("server %v must be stopped first", *args.Name)
 	}
 	return server.Delete(ctx)
 }
@@ -197,14 +196,14 @@ func commandStartServer(ctx context.Context, args *startServerArgs) error {
 	// Check if the server is already running
 	running, err := server.IsRunning(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get %v status: %v", args.Name, err)
+		return fmt.Errorf("failed to get %v status: %v", *args.Name, err)
 	}
 	if running {
-		return fmt.Errorf("server %v already running", args.Name)
+		return fmt.Errorf("server %v already running", *args.Name)
 	}
 	err = server.Start(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to start server %v: %v", args.Name, err)
+		return fmt.Errorf("failed to start server %v: %v", *args.Name, err)
 	}
 	// Wait for server to have an IP
 	for i := 0; i < 20; i++ {
