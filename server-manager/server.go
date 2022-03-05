@@ -339,7 +339,7 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 		dnsZone,
 		&dns.ResourceRecordSet{
 			Name: s.DnsName(),
-			Kind: "",
+			Kind: "dns#resourceRecordSet",
 			Type: "A",
 			Ttl:  300,
 			Rrdatas: []string{
