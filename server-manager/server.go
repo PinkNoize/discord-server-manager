@@ -333,7 +333,7 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 
 	log.Printf("Creating record: %v -> %v", s.DnsName(), ip)
 	// Set DNS record
-	_, err = rrClient.Create(
+	resultSet, err := rrClient.Create(
 		dnsProjectID,
 		dnsZone,
 		&dns.ResourceRecordSet{
@@ -345,6 +345,9 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 			},
 		},
 	).Do()
+	if resultSet != nil {
+		log.Printf("Headers: %v", resultSet.ServerResponse.Header)
+	}
 	return err
 }
 
