@@ -295,20 +295,20 @@ func (s *server) ServerIP(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("%v not running", s.Name)
 	}
 
-	var extIP *string = nil
+	var extIP string = ""
 ifaceLoop:
 	for i := range instance.NetworkInterfaces {
 		for _, cfg := range instance.NetworkInterfaces[i].AccessConfigs {
 			if cfg.Name == publicInterfaceName {
-				extIP = &(instance.NetworkInterfaces[i].NetworkIP)
+				extIP = instance.NetworkInterfaces[i].NetworkIP
 				break ifaceLoop
 			}
 		}
 	}
-	if extIP == nil {
+	if extIP == "" {
 		return "", fmt.Errorf("%v has no external interface", s.Name)
 	}
-	return *extIP, nil
+	return extIP, nil
 }
 
 func (s *server) CreateDNSRecord(ctx context.Context) error {
