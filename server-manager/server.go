@@ -300,7 +300,8 @@ ifaceLoop:
 	for i := range instance.NetworkInterfaces {
 		for _, cfg := range instance.NetworkInterfaces[i].AccessConfigs {
 			if cfg.Name == publicInterfaceName {
-				extIP = instance.NetworkInterfaces[i].NetworkIP
+				log.Printf("Network %v: %v", cfg.Name, instance.NetworkInterfaces[i].NetworkIP)
+				extIP = cfg.NatIP
 				break ifaceLoop
 			}
 		}
