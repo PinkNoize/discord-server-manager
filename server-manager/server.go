@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -333,11 +334,12 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 
 	log.Printf("Creating record: %v -> %v", s.DnsName(), ip)
 	// Set DNS record
-	resultSet, err := rrClient.Create(
+	_, err = rrClient.Create(
 		dnsProjectID,
 		dnsZone,
 		&dns.ResourceRecordSet{
 			Name: s.DnsName(),
+			Kind: "",
 			Type: "A",
 			Ttl:  300,
 			Rrdatas: []string{
@@ -345,8 +347,8 @@ func (s *server) CreateDNSRecord(ctx context.Context) error {
 			},
 		},
 	).Do()
-	if resultSet != nil {
-		log.Printf("Headers: %v", resultSet.ServerResponse.Header)
+	if err != nil {
+		log.Printf("Headers: %+v", *(err.(*googleapi.Error)))
 	}
 	return err
 }
