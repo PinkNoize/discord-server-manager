@@ -366,7 +366,7 @@ func (s *server) DeleteDNSRecord(ctx context.Context) error {
 }
 
 func (s *server) DnsName() string {
-	return fmt.Sprintf("%v.%v", s.Subdomain, baseDomain)
+	return fmt.Sprintf("%v.%v.", s.Subdomain, baseDomain)
 }
 
 func (s *server) IsStopped(ctx context.Context) (bool, error) {
