@@ -180,7 +180,7 @@ resource "google_service_account" "discord_deploy_service_account" {
   display_name = "Discord Function Account"
 }
 
-resource "google_secret_manager_secret_iam_member" "command-member" {
+resource "google_secret_manager_secret_iam_member" "discord-deploy-member" {
   project = var.project
   secret_id = google_secret_manager_secret.secret-basic.id
   role = "roles/secretmanager.secretAccessor"

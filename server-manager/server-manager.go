@@ -124,7 +124,7 @@ func SendDiscordInteractionResponse(token string, response *discordgo.Interactio
 	if err != nil {
 		return fmt.Errorf("SendDiscordInteractionResponse: %v", err)
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("Bot %v", discordAPIToken))
+	//req.Header.Add("Authorization", fmt.Sprintf("Bot %v", discordAPIToken))
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("SendDiscordInteractionResponse: %v", err)
