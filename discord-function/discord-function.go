@@ -237,7 +237,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 		return
 	}
 	//DEBUG
-	resp = []byte(`{"type": 4, "data": {"tts": False, "content": "Congrats on sending your command!", "embeds": [], "allowed_mentions": { "parse": [] }}}`)
+	resp = []byte(`{"type": 4, "data": {"tts": false, "content": "Congrats on sending your command!", "embeds": [], "allowed_mentions": { "parse": [] }}}`)
 	log.Printf("Response: %v", string(resp))
 	_, err = w.Write(resp)
 	if err != nil {
