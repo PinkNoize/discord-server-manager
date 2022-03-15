@@ -44,7 +44,7 @@ resource "google_project_service" "cb" {
 # Create Cloud Function
 resource "google_cloudfunctions_function" "function" {
   name    = var.function_name
-  region = var.region
+  region  = var.region
   runtime = "go116"
 
   available_memory_mb   = 128
@@ -55,8 +55,13 @@ resource "google_cloudfunctions_function" "function" {
   entry_point           = var.function_entry_point
   environment_variables = var.environment_variables
   service_account_email = var.service_account_email
-  event_trigger {
-    event_type = var.event_type
-    resource   = var.event_resource
+  dynamic "event_trigger" {
+    
+     for_each = var.disable == true ? toset([]) : toset([1])
+    
+    content {
+      event_type = var.event_type
+      resource   = var.event_resource
+    }
   }
 }
