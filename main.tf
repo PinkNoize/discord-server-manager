@@ -214,6 +214,7 @@ module "command_function" {
   environment_variables = {
     "PROJECT_ID"       = var.project
     "DISCORD_APPID"    = var.discord_app_id
+    "DISCORD_SECRET_ID" = google_secret_manager_secret.secret-basic.id
   }
   source_dir            = "./discord-function"
   service_account_email = google_service_account.discord_deploy_service_account.email
