@@ -57,7 +57,7 @@ resource "google_cloudfunctions_function" "function" {
   service_account_email = var.service_account_email
   dynamic "event_trigger" {
     
-     for_each = var.disable == true ? toset([]) : toset([1])
+     for_each = var.trigger_http == true ? toset([]) : toset([1])
     
     content {
       event_type = var.event_type
