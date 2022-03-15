@@ -213,6 +213,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("Command `%v` not implemented. Contact an admin", command),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}
 		}
@@ -221,6 +222,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: fmt.Sprintf("User not specified in command: %v. Probably my fault", command),
+				Flags:   uint64(discordgo.MessageFlagsEphemeral),
 			},
 		}
 	}
@@ -246,6 +248,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		}
@@ -283,6 +286,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 				Data: &discordgo.InteractionResponseData{
 					Content: "Creating server...",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		} else {
@@ -290,6 +294,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: "Operation not authorized",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		}
@@ -300,6 +305,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		}
@@ -309,7 +315,6 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			// TODO: fix json format/send whole interaction
 			pubSubData, err := json.Marshal(ForwardPubSub{
 				Command:     subcmd.Name,
 				Interaction: &rawInteraction,
@@ -327,25 +332,31 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			if err != nil {
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
+			log.Printf("Deferred response")
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 				Data: &discordgo.InteractionResponseData{
 					Content: "...",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		} else {
+			log.Print("Not authorized")
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: "Operation not authorized",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		}
 	default:
+		log.Printf("Command `%v` not implemented for server.", subcmd.Name)
 		return &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: fmt.Sprintf("Command `%v` not implemented for server.", subcmd.Name),
+				Flags:   uint64(discordgo.MessageFlagsEphemeral),
 			},
 		}, nil
 	}
