@@ -37,7 +37,7 @@ var (
 						},
 						{
 							Type:        discordgo.ApplicationCommandOptionString,
-							Name:        "MachineType",
+							Name:        "machinetype",
 							Description: "GCP Machine Type that the server will use",
 							Required:    true,
 						},
