@@ -159,7 +159,7 @@ resource "google_project_iam_member" "discord-firestore-iam" {
   member = "serviceAccount:${google_service_account.discord_service_account.email}"
 }
 
-module "command_function" {
+module "discord_function" {
   source                = "./modules/function"
   project               = var.project
   region                = var.region
@@ -205,7 +205,7 @@ resource "google_project_iam_member" "discord-deploy-secret-iam" {
   }
 }
 
-module "command_function" {
+module "discord_deploy_function" {
   source                = "./modules/function"
   project               = var.project
   region                = var.region
