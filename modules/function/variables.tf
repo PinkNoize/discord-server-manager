@@ -19,3 +19,6 @@ variable "event_type" {
 variable "event_resource" {
     default = null
 }
+variable "ingress_settings" {
+    default = null
+}

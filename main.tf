@@ -174,6 +174,7 @@ module "discord_function" {
   source_dir            = "./discord-function"
   service_account_email = google_service_account.discord_service_account.email
   trigger_http          = true
+  ingress_settings      = "ALLOW_ALL"
 }
 
 # Command deployer Cloud Function
@@ -205,4 +206,6 @@ module "discord_deploy_function" {
   }
   source_dir            = "./discord-function"
   service_account_email = google_service_account.discord_deploy_service_account.email
+  trigger_http          = true
+  ingress_settings      = "ALLOW_INTERNAL_ONLY"
 }

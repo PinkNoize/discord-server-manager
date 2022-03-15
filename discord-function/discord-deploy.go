@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/bwmarrin/discordgo"
@@ -102,7 +103,7 @@ func init() {
 	}
 }
 
-func DiscordCommandDeploy() {
+func DiscordCommandDeploy(w http.ResponseWriter, r *http.Request) {
 	for i := range commands {
 		_, err := discordSession.ApplicationCommandCreate(discordAppID, "", commands[i])
 		if err != nil {
