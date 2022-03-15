@@ -174,6 +174,16 @@ module "discord_function" {
   ingress_settings      = "ALLOW_ALL"
 }
 
+# IAM entry for all users to invoke the function
+resource "google_cloudfunctions_function_iam_member" "invoker" {
+  project        = module.discord_function.function.project
+  region         = module.discord_function.function.region
+  cloud_function = module.discord_function.function.name
+
+  role   = "roles/cloudfunctions.invoker"
+  member = "allUsers"
+}
+
 # Command deployer Cloud Function
 resource "google_service_account" "discord_deploy_service_account" {
   account_id   = "discord-deploy-service-acc"

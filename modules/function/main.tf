@@ -65,3 +65,7 @@ resource "google_cloudfunctions_function" "function" {
     }
   }
 }
+
+output "function" {
+  value = google_cloudfunctions_function.function
+}
