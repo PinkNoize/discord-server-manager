@@ -243,6 +243,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	if err != nil {
 		log.Fatalf("Error: handleApplicationCommand: Write: %v", err)
 	}
+	log.Printf("Content Type: %v", w.Header().Get("Content-Type"))
 }
 
 func handleServerGroupCommand(ctx context.Context, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
