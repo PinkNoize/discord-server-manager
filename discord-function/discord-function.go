@@ -236,6 +236,8 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	//DEBUG
+	resp = []byte(`{"type": 4, "data": {"tts": False, "content": "Congrats on sending your command!", "embeds": [], "allowed_mentions": { "parse": [] }}}`)
 	log.Printf("Response: %v", string(resp))
 	_, err = w.Write(resp)
 	if err != nil {
