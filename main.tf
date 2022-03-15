@@ -197,7 +197,7 @@ module "discord_deploy_function" {
   source                = "./modules/function"
   project               = var.project
   region                = var.region
-  function_name         = "discord-function"
+  function_name         = "discord-deploy-function"
   function_entry_point  = "DiscordCommandDeploy"
   environment_variables = {
     "PROJECT_ID"       = var.project
