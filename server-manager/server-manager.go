@@ -1,18 +1,24 @@
 package server_manager
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/firestore"
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"github.com/bwmarrin/discordgo"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
+	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
 
 // Globals
@@ -21,11 +27,18 @@ var projectZone string = os.Getenv("PROJECT_ZONE")
 var dnsProjectID string = os.Getenv("DNS_PROJECT_ID")
 var dnsZone string = os.Getenv("DNS_MANAGED_ZONE")
 var baseDomain string = os.Getenv("BASE_DOMAIN")
+var discordAppID string = os.Getenv("DISCORD_APPID")
+var discordSecretID string = os.Getenv("DISCORD_SECRET_ID")
+var discordAPIToken string
 
 var firestoreClient *firestore.Client
 var computeClient *compute.Service
 var dnsClient *dns.Service
 var rrClient *dns.ResourceRecordSetsService
+var discordSession *discordgo.Session
+var httpClient http.Client = http.Client{Timeout: time.Second * 5}
+
+var initDiscordSession sync.Once
 
 func init() {
 	var err error
@@ -45,13 +58,36 @@ func init() {
 	rrClient = dns.NewResourceRecordSetsService(dnsClient)
 }
 
+func initDiscord(ctx context.Context) {
+	client, err := secretmanager.NewClient(ctx)
+	if err != nil {
+		log.Fatalf("Error: initDiscord: NewClient: %v", err)
+	}
+	defer client.Close()
+	req := &secretmanagerpb.AccessSecretVersionRequest{
+		Name: fmt.Sprintf("%v/versions/latest", discordSecretID),
+	}
+	result, err := client.AccessSecretVersion(ctx, req)
+	if err != nil {
+		log.Fatalf("Error: initDiscord: AccessSecretVersion: %v", err)
+	}
+	discordAPIToken = string(result.Payload.Data)
+	// discordSession, err = discordgo.New(fmt.Sprintf("Bearer %v", discordAPIToken))
+	// if err != nil {
+	// 	log.Fatalf("Error: initDiscord: %v", err)
+	// }
+}
+
 // Cloud Function Code
 
 // PubSubMessage is the payload of a Pub/Sub event.
 // See the documentation for more details:
 // https://cloud.google.com/pubsub/docs/reference/rest/v1/PubsubMessage
 type PubSubMessage struct {
-	Data       []byte          `json:"data"`
+	Data struct {
+		Command     string  `json:"command"`
+		Interaction *[]byte `json:"interaction,omitempty"`
+	} `json:"data"`
 	Attributes json.RawMessage `json:"attributes"`
 }
 
@@ -76,62 +112,174 @@ type addUserIPArgs struct {
 	User *string `json:"user"`
 }
 
+func SendDiscordInteractionResponse(token string, response *discordgo.InteractionResponse) error {
+	body, err := json.Marshal(*response)
+	if err != nil {
+		return fmt.Errorf("SendDiscordInteractionResponse: jsonMarshal %v", err)
+	}
+	req, err := http.NewRequest(
+		"POST",
+		fmt.Sprintf("%v%v/%v", discordgo.EndpointWebhooks, discordAppID, token),
+		bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("SendDiscordInteractionResponse: %v", err)
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("Bot %v", discordAPIToken))
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("SendDiscordInteractionResponse: %v", err)
+	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("SendDiscordInteractionResponse: StatusCode: %v", resp.StatusCode)
+	}
+	return nil
+}
+
 // Handles server commands.
 func CommandPubSub(ctx context.Context, m PubSubMessage) error {
-	command := string(m.Data) // Automatically decoded from base64.
-	log.Println(command)
+	command := m.Data.Command
+	response := discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredMessageUpdate,
+		Data: &discordgo.InteractionResponseData{
+			Content: "Internal Error",
+			Flags:   uint64(discordgo.MessageFlagsEphemeral),
+		},
+	}
+	defer func() {
+		if m.Data.Interaction != nil {
+			initDiscordSession.Do(func() { initDiscord(ctx) })
+			interaction := discordgo.Interaction{}
+			err := interaction.UnmarshalJSON(*m.Data.Interaction)
+			if err != nil {
+				log.Printf("Error: InteractionUnmarshal: %v", err)
+				return
+			}
+			err = SendDiscordInteractionResponse(interaction.Token, &response)
+			if err != nil {
+				log.Printf("Error: InteractionRespond: %v", err)
+				return
+			}
+		}
+	}()
+	log.Printf("Command: %v", command)
 	switch command {
 	case "create":
 		args := createServerArgs{}
 		err := json.Unmarshal(m.Attributes, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
 			return fmt.Errorf("error parsing CreateServerArgs: %v", err)
 		}
-		_, err = commandCreateServer(ctx, &args)
+		server, err := commandCreateServer(ctx, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Failed to create server: %v",
+				err,
+			)
 			return fmt.Errorf("CreateServer failed: %v", err)
 		}
+		response.Data.Content = fmt.Sprintf(
+			"Created %v (%v). The server will need a restart to use the domain name.",
+			server.Name,
+			server.DnsName(),
+		)
 	case "delete":
 		args := deleteServerArgs{}
 		err := json.Unmarshal(m.Attributes, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
 			return fmt.Errorf("error parsing DeleteServerArgs: %v", err)
 		}
 		err = commandDeleteServer(ctx, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Failed to delete server: %v",
+				err,
+			)
 			return fmt.Errorf("DeleteServer failed: %v", err)
 		}
+		response.Data.Content = fmt.Sprintf(
+			"Server %v deleted.",
+			args.Name,
+		)
 	case "start":
 		args := startServerArgs{}
 		err := json.Unmarshal(m.Attributes, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
 			return fmt.Errorf("error parsing startServerArgs: %v", err)
 		}
 		err = commandStartServer(ctx, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Failed to start server: %v",
+				err,
+			)
 			return fmt.Errorf("start Server failed: %v", err)
 		}
+		response.Data.Content = fmt.Sprintf(
+			"Server %v started.",
+			args.Name,
+		)
 	case "stop":
 		args := stopServerArgs{}
 		err := json.Unmarshal(m.Attributes, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
 			return fmt.Errorf("error parsing stopServerArgs: %v", err)
 		}
 		err = commandStopServer(ctx, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Failed to stop server: %v",
+				err,
+			)
 			return fmt.Errorf("stop Server failed: %v", err)
 		}
+		response.Data.Content = fmt.Sprintf(
+			"Server %v stopped.",
+			args.Name,
+		)
 	case "add-user-ip":
 		args := addUserIPArgs{}
 		err := json.Unmarshal(m.Attributes, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
 			return fmt.Errorf("error parsing addUserIPArgs: %v", err)
 		}
 		err = commandAddUserIP(ctx, &args)
 		if err != nil {
+			response.Data.Content = fmt.Sprintf(
+				"Failed to add IP: %v",
+				err,
+			)
 			return fmt.Errorf("AddUserIP failed: %v", err)
 		}
+		response.Data.Content = fmt.Sprintf(
+			"Added %v to %v.",
+			args.IP,
+			args.Name,
+		)
 	default:
+		response.Data.Content = fmt.Sprintf(
+			"Command not recognized: %v",
+			command,
+		)
 		return fmt.Errorf("command %v not recognized", command)
 	}
 	return nil

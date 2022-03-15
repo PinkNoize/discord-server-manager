@@ -38,6 +38,19 @@ resource "google_project_service" "comp" {
   disable_on_destroy         = false
 }
 
+# Discord API secret
+resource "google_secret_manager_secret" "secret-basic" {
+  secret_id = "discord-api-secret"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+}
+
 # Cloud Function Resources
 
 resource "random_id" "id" {
@@ -74,6 +87,16 @@ resource "google_project_iam_member" "compute-iam" {
   member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+resource "google_project_iam_member" "secret-iam" {
+  project = var.project
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
+  condition {
+    title = "discord-api-secret"
+    expression = "resource.service == \"secretmanager.googleapis.com\" && resource.name == \"${google_secret_manager_secret.secret-basic.id}\""
+  }
+}
+
 # Add permissions to access DNS project
 resource "google_project_iam_binding" "dns-iam" {
   provider = google.dns
@@ -89,11 +112,13 @@ module "command_function" {
   function_name         = "command-function"
   function_entry_point  = "CommandPubSub"
   environment_variables = {
-    "PROJECT_ID"       = var.project
-    "PROJECT_ZONE"     = var.zone
-    "DNS_PROJECT_ID"   = var.dns_project_id
-    "DNS_MANAGED_ZONE" = var.dns_managed_zone
-    "BASE_DOMAIN"      = var.base_domain
+    "PROJECT_ID"        = var.project
+    "PROJECT_ZONE"      = var.zone
+    "DNS_PROJECT_ID"    = var.dns_project_id
+    "DNS_MANAGED_ZONE"  = var.dns_managed_zone
+    "BASE_DOMAIN"       = var.base_domain
+    "DISCORD_APPID"     = var.discord_app_id
+    "DISCORD_SECRET_ID" = google_secret_manager_secret.secret-basic.id
   }
   source_dir            = "./server-manager"
   service_account_email = google_service_account.service_account.email
@@ -106,4 +131,90 @@ resource "google_app_engine_application" "app" {
   project       = var.project
   location_id   = var.region
   database_type = "CLOUD_FIRESTORE"
+}
+
+# Discord Bot Cloud Function
+
+resource "google_project_iam_custom_role" "discord_func_role" {
+  role_id     = "discord_role_${random_id.id.hex}"
+  title       = "Discord Func Role"
+  description = ""
+  permissions = ["datastore.databases.get"]
+}
+
+resource "google_service_account" "discord_service_account" {
+  account_id   = "discord-func-service-acc"
+  display_name = "Discord Function Account"
+}
+
+resource "google_project_iam_member" "discord-custom-role-iam" {
+  project = var.project
+  role    = google_project_iam_custom_role.discord_func_role.id
+  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+}
+
+resource "google_project_iam_member" "discord-firestore-iam" {
+  project = var.project
+  role    = "roles/datastore.user"
+  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+}
+
+module "command_function" {
+  source                = "./modules/function"
+  project               = var.project
+  region                = var.region
+  function_name         = "discord-function"
+  function_entry_point  = "DiscordFunctionEntry"
+  environment_variables = {
+    "PROJECT_ID"       = var.project
+    "COMMAND_TOPIC"    = google_pubsub_topic.command_topic.id
+    "ADMIN_DISCORD_ID" = var.admin_discord_id
+    "DISCORD_PUBKEY"   = var.discord_pubkey
+  }
+  source_dir            = "./discord-function"
+  service_account_email = google_service_account.discord_service_account.email
+  trigger_http          = true
+}
+
+# Command deployer Cloud Function
+resource "google_project_iam_custom_role" "discord_deploy_func_role" {
+  role_id     = "discord_dply_${random_id.id.hex}"
+  title       = "Discord Deploy Func Role"
+  description = ""
+  permissions = []
+}
+
+resource "google_service_account" "discord_deploy_service_account" {
+  account_id   = "discord-deploy-func-service-acc"
+  display_name = "Discord Function Account"
+}
+
+resource "google_project_iam_member" "discord-deploy-custom-role-iam" {
+  project = var.project
+  role    = google_project_iam_custom_role.discord_deploy_func_role.id
+  member = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
+}
+
+resource "google_project_iam_member" "discord-deploy-secret-iam" {
+  project = var.project
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
+  condition {
+    title = "discord-api-secret"
+    expression = "resource.service == \"secretmanager.googleapis.com\" && resource.name == \"${google_secret_manager_secret.secret-basic.id}\""
+  }
+}
+
+module "command_function" {
+  source                = "./modules/function"
+  project               = var.project
+  region                = var.region
+  function_name         = "discord-function"
+  function_entry_point  = "DiscordCommandDeploy"
+  environment_variables = {
+    "PROJECT_ID"       = var.project
+    "DISCORD_APPID"    = var.discord_app_id
+  }
+  source_dir            = "./discord-function"
+  service_account_email = google_service_account.discord_deploy_service_account.email
 }

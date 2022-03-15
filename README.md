@@ -1,5 +1,7 @@
 # gcp-server-manager
 
+Fill out `terraform.tfvars`
+
 ## Init
 ```
 $ terraform init
