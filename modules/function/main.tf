@@ -6,7 +6,7 @@ locals {
 data "archive_file" "source" {
   type        = "zip"
   source_dir  = var.source_dir
-  output_path = "/tmp/function-${local.timestamp}.zip"
+  output_path = "/tmp/${var.function_name}-${local.timestamp}.zip"
 }
 
 # Create bucket that will host the source code
