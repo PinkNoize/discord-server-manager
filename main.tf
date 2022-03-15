@@ -156,6 +156,13 @@ resource "google_project_iam_member" "discord-firestore-iam" {
   member = "serviceAccount:${google_service_account.discord_service_account.email}"
 }
 
+resource "google_pubsub_topic_iam_member" "member" {
+  project = google_pubsub_topic.command_topic.project
+  topic = google_pubsub_topic.command_topic.name
+  role = "roles/pubsub.publisher"
+  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+}
+
 module "discord_function" {
   source                = "./modules/function"
   project               = var.project
