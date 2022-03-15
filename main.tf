@@ -177,22 +177,9 @@ module "discord_function" {
 }
 
 # Command deployer Cloud Function
-resource "google_project_iam_custom_role" "discord_deploy_func_role" {
-  role_id     = "discord_dply_${random_id.id.hex}"
-  title       = "Discord Deploy Func Role"
-  description = ""
-  permissions = []
-}
-
 resource "google_service_account" "discord_deploy_service_account" {
-  account_id   = "discord-deploy-func-service-acc"
+  account_id   = "discord-deploy-service-acc"
   display_name = "Discord Function Account"
-}
-
-resource "google_project_iam_member" "discord-deploy-custom-role-iam" {
-  project = var.project
-  role    = google_project_iam_custom_role.discord_deploy_func_role.id
-  member = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
 }
 
 resource "google_project_iam_member" "discord-deploy-secret-iam" {
