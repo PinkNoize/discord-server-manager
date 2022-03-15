@@ -87,14 +87,11 @@ resource "google_project_iam_member" "compute-iam" {
   member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
-resource "google_project_iam_member" "secret-iam" {
+resource "google_secret_manager_secret_iam_member" "command-member" {
   project = var.project
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.service_account.email}"
-  condition {
-    title = "discord-api-secret"
-    expression = "resource.service == \"secretmanager.googleapis.com\" && resource.name == \"${google_secret_manager_secret.secret-basic.id}\""
-  }
+  secret_id = google_secret_manager_secret.secret-basic.id
+  role = "roles/secretmanager.secretAccessor"
+  member = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 # Add permissions to access DNS project
@@ -183,14 +180,11 @@ resource "google_service_account" "discord_deploy_service_account" {
   display_name = "Discord Function Account"
 }
 
-resource "google_project_iam_member" "discord-deploy-secret-iam" {
+resource "google_secret_manager_secret_iam_member" "command-member" {
   project = var.project
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
-  condition {
-    title = "discord-api-secret"
-    expression = "resource.service == \"secretmanager.googleapis.com\" && resource.name.startsWith(\"${google_secret_manager_secret.secret-basic.id}\")"
-  }
+  secret_id = google_secret_manager_secret.secret-basic.id
+  role = "roles/secretmanager.secretAccessor"
+  member = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
 }
 
 module "discord_deploy_function" {
