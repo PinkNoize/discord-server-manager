@@ -3,6 +3,7 @@ package discord_function
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,7 +25,7 @@ import (
 var projectID string = os.Getenv("PROJECT_ID")
 var commandTopicID string = os.Getenv("COMMAND_TOPIC")
 var rootUserID string = os.Getenv("ADMIN_DISCORD_ID")
-var discordPubkey string = os.Getenv("DISCORD_PUBKEY")
+var discordPubkey []byte
 var discordAppID string = os.Getenv("DISCORD_APPID")
 var discordSecretID string = os.Getenv("DISCORD_SECRET_ID")
 
@@ -49,6 +50,10 @@ func init() {
 		log.Fatalf("Failed to create pubsub client: %v", err)
 	}
 	commandTopic = pubsubClient.Topic(commandTopicID)
+	discordPubkey, err = hex.DecodeString(os.Getenv("DISCORD_PUBKEY"))
+	if err != nil {
+		log.Fatalf("Failed to decode public key: %v", err)
+	}
 }
 
 var initEnforcer sync.Once
@@ -137,6 +142,7 @@ func checkUserAllowed(user string, obj string, action string) (bool, error) {
 func DiscordFunctionEntry(w http.ResponseWriter, r *http.Request) {
 	verified := discordgo.VerifyInteraction(r, ed25519.PublicKey(discordPubkey))
 	if !verified {
+		log.Printf("Failed signature verification: %v", r.RemoteAddr)
 		http.Error(w, "signature mismatch", http.StatusUnauthorized)
 		return
 	}
