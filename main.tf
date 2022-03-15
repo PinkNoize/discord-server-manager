@@ -189,7 +189,7 @@ resource "google_project_iam_member" "discord-deploy-secret-iam" {
   member  = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
   condition {
     title = "discord-api-secret"
-    expression = "resource.service == \"secretmanager.googleapis.com\" && resource.name == \"${google_secret_manager_secret.secret-basic.id}\""
+    expression = "resource.service == \"secretmanager.googleapis.com\" && resource.name.startsWith(\"${google_secret_manager_secret.secret-basic.id}\")"
   }
 }
 
