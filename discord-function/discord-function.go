@@ -352,8 +352,10 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: "Operation not authorized",
-					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					Content:         "Operation not authorized",
+					Flags:           uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:          []*discordgo.MessageEmbed{},
+					AllowedMentions: &discordgo.MessageAllowedMentions{},
 				},
 			}, nil
 		}
