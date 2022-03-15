@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/bwmarrin/discordgo"
@@ -81,7 +82,9 @@ var (
 
 var discordSession *discordgo.Session
 
-func init() {
+var initDiscordCommandDeployOnce sync.Once
+
+func initDiscordCommandDeploy() {
 	var err error
 	ctx := context.TODO()
 	client, err := secretmanager.NewClient(ctx)
@@ -104,6 +107,7 @@ func init() {
 }
 
 func DiscordCommandDeploy(w http.ResponseWriter, r *http.Request) {
+	initDiscordCommandDeployOnce.Do(initDiscordCommandDeploy)
 	for i := range commands {
 		_, err := discordSession.ApplicationCommandCreate(discordAppID, "", commands[i])
 		if err != nil {
