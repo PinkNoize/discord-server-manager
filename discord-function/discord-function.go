@@ -228,11 +228,18 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	}
 
 	// Return response to discord
-	err = json.NewEncoder(w).Encode(*response)
+
+	resp, err := json.Marshal(*response)
+	//err = json.NewEncoder(w).Encode(*response)
 	if err != nil {
 		log.Printf("Error: handleApplicationCommand: jsonEncoder: %v", err)
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
+	}
+	log.Printf("Response: %v", string(resp))
+	_, err = w.Write(resp)
+	if err != nil {
+		log.Fatalf("Error: handleApplicationCommand: Write: %v", err)
 	}
 }
 
