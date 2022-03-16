@@ -261,6 +261,13 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 		subdomain := args["subdomain"].StringValue()
 		machineType := args["machineType"].StringValue()
 		ports := args["ports"].StringValue()
+		log.Printf(
+			"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v",
+			name,
+			subdomain,
+			machineType,
+			ports,
+		)
 		allowed, err := checkUserAllowed(userID, name, "create")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
@@ -287,6 +294,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			if err != nil {
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
+			log.Print("Deferred response")
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 				Data: &discordgo.InteractionResponseData{
@@ -295,6 +303,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				},
 			}, nil
 		} else {
+			log.Print("Not authorized")
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -315,6 +324,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			}, nil
 		}
 		name := args["name"].Value.(string)
+		log.Printf("Server name: %v", name)
 		allowed, err := checkUserAllowed(userID, name, subcmd.Name)
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
@@ -337,7 +347,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			if err != nil {
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
-			log.Printf("Deferred response")
+			log.Print("Deferred response")
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 				Data: &discordgo.InteractionResponseData{

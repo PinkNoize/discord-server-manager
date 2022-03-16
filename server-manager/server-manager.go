@@ -84,11 +84,13 @@ func initDiscord(ctx context.Context) {
 // See the documentation for more details:
 // https://cloud.google.com/pubsub/docs/reference/rest/v1/PubsubMessage
 type PubSubMessage struct {
-	Data struct {
-		Command     string  `json:"command"`
-		Interaction *[]byte `json:"interaction,omitempty"`
-	} `json:"data"`
+	Data       []byte          `json:"data"`
 	Attributes json.RawMessage `json:"attributes"`
+}
+
+type ForwardPubSub struct {
+	Command     string  `json:"command"`
+	Interaction *[]byte `json:"interaction,omitempty"`
 }
 
 type createServerArgs struct {
@@ -125,6 +127,7 @@ func SendDiscordInteractionResponse(token string, response *discordgo.Interactio
 		return fmt.Errorf("SendDiscordInteractionResponse: %v", err)
 	}
 	//req.Header.Add("Authorization", fmt.Sprintf("Bot %v", discordAPIToken))
+	req.Header.Add("Content-Type", "application/json; charset=UTF-8")
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("SendDiscordInteractionResponse: %v", err)
@@ -137,7 +140,12 @@ func SendDiscordInteractionResponse(token string, response *discordgo.Interactio
 
 // Handles server commands.
 func CommandPubSub(ctx context.Context, m PubSubMessage) error {
-	command := m.Data.Command
+	var forwardedData ForwardPubSub
+	if err := json.Unmarshal([]byte(m.Data), &forwardedData); err != nil {
+		log.Fatalf("Failed to unmarshal forwardedData: %v", err)
+	}
+	command := forwardedData.Command
+	originalInteraction := forwardedData.Interaction
 	response := discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseDeferredMessageUpdate,
 		Data: &discordgo.InteractionResponseData{
@@ -146,10 +154,10 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 		},
 	}
 	defer func() {
-		if m.Data.Interaction != nil {
+		if originalInteraction != nil {
 			initDiscordSession.Do(func() { initDiscord(ctx) })
 			interaction := discordgo.Interaction{}
-			err := interaction.UnmarshalJSON(*m.Data.Interaction)
+			err := interaction.UnmarshalJSON(*originalInteraction)
 			if err != nil {
 				log.Printf("Error: InteractionUnmarshal: %v", err)
 				return
