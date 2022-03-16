@@ -243,6 +243,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	if err != nil {
 		log.Fatalf("Error: handleApplicationCommand: Write: %v", err)
 	}
+	w.Header().Set("Content-Type", "application/json")
 	log.Printf("Content Type: %v", w.Header().Get("Content-Type"))
 }
 
