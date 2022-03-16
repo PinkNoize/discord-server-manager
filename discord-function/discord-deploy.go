@@ -63,6 +63,19 @@ var (
 					},
 				},
 				{
+					Name:        "stop",
+					Description: "Stop a server",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "name",
+							Description: "Name of the server",
+							Required:    true,
+						},
+					},
+				},
+				{
 					Name:        "delete",
 					Description: "Delete a server",
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
