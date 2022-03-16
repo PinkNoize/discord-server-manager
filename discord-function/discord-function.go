@@ -73,7 +73,7 @@ e = some(where (p.eft == allow))
 
 [matchers]
 m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.act == p.act`
-	if rootUserID == "" {
+	if rootUserID != "" {
 		modelString = fmt.Sprintf(`[request_definition]
 r = sub, dom, act
 
@@ -88,6 +88,8 @@ e = some(where (p.eft == allow))
 
 [matchers]
 m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.act == p.act || r.sub == "%v"`, rootUserID)
+	} else {
+		log.Printf("ROOT ID FOUND: %v", rootUserID)
 	}
 
 	model, err := model.NewModelFromString(modelString)
