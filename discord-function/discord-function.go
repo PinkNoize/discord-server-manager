@@ -229,22 +229,14 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 
 	// Return response to discord
 
+	// MUST SET HEADER BEFORE CONTENT
 	w.Header().Set("Content-Type", "application/json")
-	resp, err := json.Marshal(*response)
-	//err = json.NewEncoder(w).Encode(*response)
+	err = json.NewEncoder(w).Encode(*response)
 	if err != nil {
 		log.Printf("Error: handleApplicationCommand: jsonEncoder: %v", err)
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	//DEBUG
-	resp = []byte(`{"type": 4, "data": {"tts": false, "content": "Congrats on sending your command!", "embeds": [], "allowed_mentions": { "parse": [] }}}`)
-	log.Printf("Response: %v", string(resp))
-	_, err = w.Write(resp)
-	if err != nil {
-		log.Fatalf("Error: handleApplicationCommand: Write: %v", err)
-	}
-	log.Printf("Content Type: %v", w.Header().Get("Content-Type"))
 }
 
 func handleServerGroupCommand(ctx context.Context, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
