@@ -171,7 +171,7 @@ module "discord_function" {
   function_entry_point  = "DiscordFunctionEntry"
   environment_variables = {
     "PROJECT_ID"       = var.project
-    "COMMAND_TOPIC"    = google_pubsub_topic.command_topic.id
+    "COMMAND_TOPIC"    = google_pubsub_topic.command_topic.name
     "ADMIN_DISCORD_ID" = var.admin_discord_id
     "DISCORD_PUBKEY"   = var.discord_pubkey
   }
