@@ -362,7 +362,7 @@ func (s *server) IsStopped(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return status == STOPPED ||
-		status == STOPPING, nil
+		status == STOPPING || status == TERMINATED, nil
 }
 
 func (s *server) IsRunning(ctx context.Context) (bool, error) {

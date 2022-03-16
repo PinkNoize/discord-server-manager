@@ -201,7 +201,7 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 		}
 		response.Content = fmt.Sprintf(
 			"Server %v deleted.",
-			args.Name,
+			*args.Name,
 		)
 	case "start":
 		args := startServerArgs{}
@@ -223,7 +223,7 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 		}
 		response.Content = fmt.Sprintf(
 			"Server %v started.",
-			args.Name,
+			*args.Name,
 		)
 	case "stop":
 		args := stopServerArgs{}
@@ -245,7 +245,7 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 		}
 		response.Content = fmt.Sprintf(
 			"Server %v stopped.",
-			args.Name,
+			*args.Name,
 		)
 	case "add-user-ip":
 		args := addUserIPArgs{}
