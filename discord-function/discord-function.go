@@ -10,15 +10,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"sync"
 
 	"cloud.google.com/go/firestore"
 	"cloud.google.com/go/pubsub"
 	"github.com/bwmarrin/discordgo"
-	casbin "github.com/casbin/casbin/v2"
-	"github.com/casbin/casbin/v2/model"
-	casfs "github.com/reedom/casbin-firestore-adapter"
 )
 
 // Globals
@@ -30,7 +26,7 @@ var discordAppID string = os.Getenv("DISCORD_APPID")
 var discordSecretID string = os.Getenv("DISCORD_SECRET_ID")
 
 var firestoreClient *firestore.Client
-var enforcer *casbin.CachedEnforcer
+var permsChecker *PermissionManager
 var commandTopic *pubsub.Topic
 
 type ForwardPubSub struct {
@@ -59,53 +55,11 @@ func init() {
 var initEnforcer sync.Once
 
 func initalizeEnforcer() {
-	modelString := `[request_definition]
-r = sub, dom, act
-
-[policy_definition]
-p = sub, dom, act
-
-[role_definition]
-g = _, _, _
-
-[policy_effect]
-e = some(where (p.eft == allow))
-
-[matchers]
-m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.act == p.act`
-	if rootUserID != "" {
-		modelString = fmt.Sprintf(`[request_definition]
-r = sub, dom, act
-
-[policy_definition]
-p = sub, dom, act
-
-[role_definition]
-g = _, _, _
-
-[policy_effect]
-e = some(where (p.eft == allow))
-
-[matchers]
-m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.act == p.act || r.sub == "%v"`, rootUserID)
-	} else {
-		log.Printf("ROOT ID FOUND: %v", rootUserID)
-	}
-
-	model, err := model.NewModelFromString(modelString)
+	var err error
+	permsChecker, err = NewPermissionManager(os.Getenv("ADMIN_DISCORD_ID"), firestoreClient)
 	if err != nil {
-		log.Fatalf("Error: NewModelFromString: %v", err)
+		log.Fatalf("NewPermissionManager(): %v", err)
 	}
-	adapter := casfs.NewAdapter(firestoreClient)
-	enf, err := casbin.NewCachedEnforcer()
-	if err != nil {
-		log.Fatalf("Error: NewEnforcer: %v", err)
-	}
-	err = enf.InitWithModelAndAdapter(model, adapter)
-	if err != nil {
-		log.Fatalf("Error: NewEnforcer: %v", err)
-	}
-	enforcer = enf
 }
 
 func optionsToMap(opts []*discordgo.ApplicationCommandInteractionDataOption) map[string]*discordgo.ApplicationCommandInteractionDataOption {
@@ -127,17 +81,6 @@ func verifyOpts(opts map[string]*discordgo.ApplicationCommandInteractionDataOpti
 		}
 	}
 	return true, ""
-}
-
-func checkUserAllowed(user string, obj string, action string) (bool, error) {
-	if strings.HasSuffix(user, "_role") {
-		return false, fmt.Errorf("checkUserAllowed: Invalid User name: %v", user)
-	}
-	allowed, err := enforcer.Enforce(user, obj, action)
-	if err != nil {
-		return false, fmt.Errorf("checkUserAllowed: %v", err)
-	}
-	return allowed, err
 }
 
 // Cloud Function Entry
@@ -210,6 +153,13 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 				return
 			}
+		case "user":
+			response, err = handleUserGroupCommand(ctx, userID, commandData, rawInteraction)
+			if err != nil {
+				log.Printf("Error: handleApplicationCommand: handleServerGroupCommand: %v", err)
+				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
+				return
+			}
 		default:
 			response = &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -248,7 +198,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 	switch subcmd.Name {
 	case "create":
 		args := optionsToMap(subcmd.Options)
-		if pass, missing := verifyOpts(args, []string{"name", "subdomain", "machineType", "ports"}); !pass {
+		if pass, missing := verifyOpts(args, []string{"name", "subdomain", "machinetype", "ports"}); !pass {
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -259,7 +209,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 		}
 		name := args["name"].StringValue()
 		subdomain := args["subdomain"].StringValue()
-		machineType := args["machineType"].StringValue()
+		machineType := args["machinetype"].StringValue()
 		ports := args["ports"].StringValue()
 		log.Printf(
 			"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v",
@@ -268,7 +218,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			machineType,
 			ports,
 		)
-		allowed, err := checkUserAllowed(userID, name, "create")
+		allowed, err := permsChecker.CheckServerOp(userID, name, "create")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -286,7 +236,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				Attributes: map[string]string{
 					"name":        name,
 					"subdomain":   subdomain,
-					"machineType": machineType,
+					"machinetype": machineType,
 					"ports":       ports,
 				},
 			})
@@ -325,7 +275,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 		}
 		name := args["name"].Value.(string)
 		log.Printf("Server name: %v", name)
-		allowed, err := checkUserAllowed(userID, name, subcmd.Name)
+		allowed, err := permsChecker.CheckServerOp(userID, name, subcmd.Name)
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -373,6 +323,180 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: fmt.Sprintf("Command `%v` not implemented for server.", subcmd.Name),
+				Flags:   uint64(discordgo.MessageFlagsEphemeral),
+			},
+		}, nil
+	}
+}
+
+func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+	opts := data.Options
+	subcmd := opts[0]
+	log.Printf("Subcommand: %v", subcmd.Name)
+	switch subcmd.Name {
+	case "add":
+		args := optionsToMap(subcmd.Options)
+		if pass, missing := verifyOpts(args, []string{"user", "name"}); !pass {
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		targetUser := args["user"].UserValue(nil)
+		name := args["name"].StringValue()
+		if targetUser.ID == "" {
+			log.Printf("Target User ID not specified: %v", *targetUser)
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Target User ID not specified"),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		log.Printf("Add %v to server %v", targetUser, name)
+		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "add")
+		if err != nil {
+			return nil, fmt.Errorf("enforce: %v", err)
+		}
+		if allowed {
+			// TODO: Check existence of server
+			success, err := permsChecker.AddUserToServer(targetUser.ID, name)
+			if err != nil {
+				log.Printf("AddUserToServer: %v", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Internal error. Oops"),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+			if !success {
+				log.Printf("User %v already has role for server: %v", targetUser.ID, name)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("User, <@%v>, has already been added to server: %v", targetUser.ID, name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+						AllowedMentions: &discordgo.MessageAllowedMentions{
+							Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
+							Users: []string{targetUser.ID},
+						},
+					},
+				}, nil
+			}
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("User, <@%v>, has been added to server: %v", targetUser.ID, name),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		} else {
+			log.Print("Not authorized")
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content:         "Operation not authorized",
+					Flags:           uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:          []*discordgo.MessageEmbed{},
+					AllowedMentions: &discordgo.MessageAllowedMentions{},
+				},
+			}, nil
+		}
+	case "remove":
+		args := optionsToMap(subcmd.Options)
+		if pass, missing := verifyOpts(args, []string{"user", "name"}); !pass {
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		targetUser := args["user"].UserValue(nil)
+		name := args["name"].StringValue()
+		if targetUser.ID == "" {
+			log.Printf("Target User ID not specified: %v", *targetUser)
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Target User ID not specified"),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		log.Printf("Remove %v from server %v", targetUser, name)
+		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "add")
+		if err != nil {
+			return nil, fmt.Errorf("enforce: %v", err)
+		}
+		if allowed {
+			// TODO: Check existence of server
+			success, err := permsChecker.RemoveUserFromServer(targetUser.ID, name)
+			if err != nil {
+				log.Printf("RemoveUserFromServer: %v", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Internal error. Oops"),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+			if !success {
+				log.Printf("User %v has no role for server: %v", targetUser.ID, name)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("User, <@%v>, is not in server: %v", targetUser.ID, name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+						AllowedMentions: &discordgo.MessageAllowedMentions{
+							Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
+							Users: []string{targetUser.ID},
+						},
+					},
+				}, nil
+			}
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("User, <@%v>, has been removed from server: %v", targetUser.ID, name),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		} else {
+			log.Print("Not authorized")
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content:         "Operation not authorized",
+					Flags:           uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:          []*discordgo.MessageEmbed{},
+					AllowedMentions: &discordgo.MessageAllowedMentions{},
+				},
+			}, nil
+		}
+	case "perms":
+		log.Printf("Command `%v` not implemented for user.", subcmd.Name)
+		return &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Command `%v` not implemented for user.", subcmd.Name),
+				Flags:   uint64(discordgo.MessageFlagsEphemeral),
+			},
+		}, nil
+	default:
+		log.Printf("Command `%v` not implemented for user.", subcmd.Name)
+		return &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Command `%v` not implemented for user.", subcmd.Name),
 				Flags:   uint64(discordgo.MessageFlagsEphemeral),
 			},
 		}, nil

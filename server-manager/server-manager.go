@@ -94,7 +94,7 @@ type ForwardPubSub struct {
 type createServerArgs struct {
 	Name        *string `json:"name"`
 	Subdomain   *string `json:"subdomain"`
-	MachineType *string `json:"machineType"`
+	MachineType *string `json:"machinetype"`
 	Ports       *string `json:"ports"`
 }
 type deleteServerArgs struct {
