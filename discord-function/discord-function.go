@@ -245,6 +245,17 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
 			log.Print("Deferred response")
+			_, err = permsChecker.CreateServerPermissions(name)
+			if err != nil {
+				log.Printf("Failed to create server permissions. You may need to delete the server to clean up.")
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
+					Data: &discordgo.InteractionResponseData{
+						Content: "Failed to create server permissions. You may need to delete the server to clean up.",
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 				Data: &discordgo.InteractionResponseData{
@@ -298,6 +309,19 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
 			log.Print("Deferred response")
+			if subcmd.Name == "remove" {
+				_, err = permsChecker.DeleteServerPermissions(name)
+				if err != nil {
+					log.Printf("Failed to delete server permissions.")
+					return &discordgo.InteractionResponse{
+						Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
+						Data: &discordgo.InteractionResponseData{
+							Content: "Failed to delete server permissions.",
+							Flags:   uint64(discordgo.MessageFlagsEphemeral),
+						},
+					}, nil
+				}
+			}
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 				Data: &discordgo.InteractionResponseData{
@@ -380,7 +404,7 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
-						Content: fmt.Sprintf("User, <@%v>, has already been added to server: %v", targetUser.ID, name),
+						Content: fmt.Sprintf("<@%v>, has already been added to server: %v", targetUser.ID, name),
 						Flags:   uint64(discordgo.MessageFlagsEphemeral),
 						AllowedMentions: &discordgo.MessageAllowedMentions{
 							Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
@@ -392,7 +416,7 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("User, <@%v>, has been added to server: %v", targetUser.ID, name),
+					Content: fmt.Sprintf("<@%v>, has been added to server: %v", targetUser.ID, name),
 					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
@@ -454,7 +478,7 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
-						Content: fmt.Sprintf("User, <@%v>, is not in server: %v", targetUser.ID, name),
+						Content: fmt.Sprintf("<@%v>, is not in server: %v", targetUser.ID, name),
 						Flags:   uint64(discordgo.MessageFlagsEphemeral),
 						AllowedMentions: &discordgo.MessageAllowedMentions{
 							Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
@@ -466,7 +490,7 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content: fmt.Sprintf("User, <@%v>, has been removed from server: %v", targetUser.ID, name),
+					Content: fmt.Sprintf("<@%v>, has been removed from server: %v", targetUser.ID, name),
 					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
