@@ -12,7 +12,7 @@ import (
 )
 
 type PermissionManager struct {
-	enforcer *casbin.CachedEnforcer
+	enforcer *casbin.Enforcer
 }
 
 func NewPermissionManager(rootUserID string, firestoreClient *firestore.Client) (*PermissionManager, error) {
@@ -61,6 +61,10 @@ m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.obj == p.obj && r.act == p.act
 	err = enf.InitWithModelAndAdapter(model, adapter)
 	if err != nil {
 		return nil, fmt.Errorf("Error: NewEnforcer: %v", err)
+	}
+	err = enf.LoadPolicy()
+	if err != nil {
+		return nil, fmt.Errorf("Error: LoadPolicy: %v", err)
 	}
 	return &PermissionManager{
 		enforcer: enf,
