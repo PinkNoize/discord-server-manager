@@ -54,7 +54,7 @@ m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.obj == p.obj && r.act == p.act
 		return nil, fmt.Errorf("Error: NewModelFromString: %v", err)
 	}
 	adapter := casfs.NewAdapter(firestoreClient)
-	enf, err := casbin.NewCachedEnforcer()
+	enf, err := casbin.NewEnforcer()
 	if err != nil {
 		return nil, fmt.Errorf("Error: NewEnforcer: %v", err)
 	}
