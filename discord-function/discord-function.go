@@ -309,7 +309,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
 			log.Print("Deferred response")
-			if subcmd.Name == "remove" {
+			if subcmd.Name == "delete" {
 				_, err = permsChecker.DeleteServerPermissions(name)
 				if err != nil {
 					log.Printf("Failed to delete server permissions.")
