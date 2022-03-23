@@ -310,9 +310,10 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			}
 			log.Print("Deferred response")
 			if subcmd.Name == "delete" {
+				log.Printf("Deleting permissions")
 				_, err = permsChecker.DeleteServerPermissions(name)
 				if err != nil {
-					log.Printf("Failed to delete server permissions.")
+					log.Printf("Failed to delete server permissions: %v", err)
 					return &discordgo.InteractionResponse{
 						Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 						Data: &discordgo.InteractionResponseData{
