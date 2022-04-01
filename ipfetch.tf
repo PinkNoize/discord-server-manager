@@ -96,9 +96,9 @@ module "key_rotate_function" {
   event_resource        = "${google_pubsub_topic.key_rotate_topic.id}"
 }
 
-resource "google_pubsub_topic_iam_member" "ip-fetch-pubsub-member" {
-  project = google_pubsub_topic.command_topic.project
-  topic = google_pubsub_topic.command_topic.name
+resource "google_pubsub_topic_iam_member" "key-rotate-secret-pubsub-member" {
+  project = google_pubsub_topic.key_rotate_topic.project
+  topic = google_pubsub_topic.key_rotate_topic.name
   role = "roles/pubsub.publisher"
   member = "domain:gcp-sa-secretmanager.iam.gserviceaccount.com"
 }
