@@ -80,13 +80,6 @@ resource "google_secret_manager_secret_iam_member" "key-rotate-member" {
   member = "serviceAccount:${google_service_account.key_rotate_service_account.email}"
 }
 
-resource "google_pubsub_topic_iam_member" "key_rotate-pubsub-member" {
-  project = google_pubsub_topic.key_rotate_topic.project
-  topic = google_pubsub_topic.key_rotate_topic.name
-  role = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_service_account.key_rotate_service_account.email}"
-}
-
 module "key_rotate_function" {
   source                = "./modules/function"
   project               = var.project
@@ -101,4 +94,11 @@ module "key_rotate_function" {
   service_account_email = google_service_account.key_rotate_service_account.email
   event_type            = "google.pubsub.topic.publish"
   event_resource        = "${google_pubsub_topic.key_rotate_topic.id}"
+}
+
+resource "google_pubsub_topic_iam_member" "ip-fetch-pubsub-member" {
+  project = google_pubsub_topic.command_topic.project
+  topic = google_pubsub_topic.command_topic.name
+  role = "roles/pubsub.publisher"
+  member = "domain:gcp-sa-secretmanager.iam.gserviceaccount.com"
 }
