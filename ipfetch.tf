@@ -12,7 +12,7 @@ resource "google_secret_manager_secret" "ip-fetch-key" {
     }
   }
   rotation {
-    rotation_period = 7889238 # 3 months
+    rotation_period = "7889238s" # 3 months
   }
   topics {
     # For publication to succeed, the Secret Manager Service Agent service account must have pubsub.publisher permissions on the topic.
