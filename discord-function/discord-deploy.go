@@ -101,6 +101,19 @@ var (
 						},
 					},
 				},
+				{
+					Name:        "connect",
+					Description: "Connect to a server",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "name",
+							Description: "Name of the server",
+							Required:    true,
+						},
+					},
+				},
 			},
 		},
 		{

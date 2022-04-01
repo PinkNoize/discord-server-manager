@@ -2,20 +2,31 @@ package discord_function
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"cloud.google.com/go/pubsub"
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"github.com/bwmarrin/discordgo"
+	"github.com/google/uuid"
+	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
+
+const CONNECT_TOKEN_LIFE = 15
 
 // Globals
 var projectID string = os.Getenv("PROJECT_ID")
@@ -24,6 +35,8 @@ var rootUserID string = os.Getenv("ADMIN_DISCORD_ID")
 var discordPubkey []byte
 var discordAppID string = os.Getenv("DISCORD_APPID")
 var discordSecretID string = os.Getenv("DISCORD_SECRET_ID")
+var keySecretID string = os.Getenv("KEY_SECRET_ID")
+var ipFetchURL string = os.Getenv("IP_FETCH_URL")
 
 var firestoreClient *firestore.Client
 var permsChecker *PermissionManager
@@ -118,6 +131,7 @@ func DiscordFunctionEntry(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error: Unknown Interaction Type: %v", interaction.Type)
 		http.Error(w, "Unknown Interaction Type", http.StatusNotImplemented)
 	}
+	log.Println("Complete") // maybe flushes logger
 }
 
 func handlePing(w http.ResponseWriter) {
@@ -256,6 +270,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 					},
 				}, nil
 			}
+			// TODO: remove existing role mappings
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 				Data: &discordgo.InteractionResponseData{
@@ -284,7 +299,7 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				},
 			}, nil
 		}
-		name := args["name"].Value.(string)
+		name := args["name"].StringValue()
 		log.Printf("Server name: %v", name)
 		allowed, err := permsChecker.CheckServerOp(userID, name, subcmd.Name)
 		if err != nil {
@@ -328,6 +343,61 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				Data: &discordgo.InteractionResponseData{
 					Content: "...",
 					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		} else {
+			log.Print("Not authorized")
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content:         "Operation not authorized",
+					Flags:           uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:          []*discordgo.MessageEmbed{},
+					AllowedMentions: &discordgo.MessageAllowedMentions{},
+				},
+			}, nil
+		}
+	case "connect":
+		args := optionsToMap(subcmd.Options)
+		if pass, missing := verifyOpts(args, []string{"name"}); !pass {
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		name := args["name"].StringValue()
+		log.Printf("Server name: %v", name)
+		// Can connect if have start permissions
+		allowed, err := permsChecker.CheckServerOp(userID, name, "start")
+		if err != nil {
+			return nil, fmt.Errorf("enforce: %v", err)
+		}
+		if allowed {
+			// TODO: check if server exists
+			connectUrl, err := generateConnectUrl(ctx, userID, name)
+			if err != nil {
+				log.Printf("ERROR: generateConnectUrl: %v", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Internal Server Error",
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Embeds: []*discordgo.MessageEmbed{
+						{
+							URL:   connectUrl,
+							Title: fmt.Sprintf("Connect to %v", name),
+						},
+					},
+					Flags: uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		} else {
@@ -407,10 +477,6 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 					Data: &discordgo.InteractionResponseData{
 						Content: fmt.Sprintf("<@%v>, has already been added to server: %v", targetUser.ID, name),
 						Flags:   uint64(discordgo.MessageFlagsEphemeral),
-						AllowedMentions: &discordgo.MessageAllowedMentions{
-							Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
-							Users: []string{targetUser.ID},
-						},
 					},
 				}, nil
 			}
@@ -426,10 +492,9 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Content:         "Operation not authorized",
-					Flags:           uint64(discordgo.MessageFlagsEphemeral),
-					Embeds:          []*discordgo.MessageEmbed{},
-					AllowedMentions: &discordgo.MessageAllowedMentions{},
+					Content: "Operation not authorized",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:  []*discordgo.MessageEmbed{},
 				},
 			}, nil
 		}
@@ -481,10 +546,6 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 					Data: &discordgo.InteractionResponseData{
 						Content: fmt.Sprintf("<@%v>, is not in server: %v", targetUser.ID, name),
 						Flags:   uint64(discordgo.MessageFlagsEphemeral),
-						AllowedMentions: &discordgo.MessageAllowedMentions{
-							Parse: []discordgo.AllowedMentionType{discordgo.AllowedMentionTypeUsers},
-							Users: []string{targetUser.ID},
-						},
 					},
 				}, nil
 			}
@@ -526,4 +587,92 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 			},
 		}, nil
 	}
+}
+
+func serverExists(name string) bool {
+	// TODO: finish me
+	return true
+}
+
+type Token struct {
+	Expiration time.Time `json:"expiration" firestore:"expiration"`
+	Id         string    `json:"id" firestore:"id"`
+	User       string    `json:"user" firestore:"user"`
+	ServerName string    `json:"name" firestore:"name"`
+}
+
+var initAESKeyOnce sync.Once
+var aesGCM cipher.AEAD
+
+func initAESKey() {
+	var err error
+	ctx := context.TODO()
+	client, err := secretmanager.NewClient(ctx)
+	if err != nil {
+		log.Fatalf("Error: init: NewClient: %v", err)
+	}
+	defer client.Close()
+	req := &secretmanagerpb.AccessSecretVersionRequest{
+		Name: fmt.Sprintf("%v/versions/latest", keySecretID),
+	}
+	result, err := client.AccessSecretVersion(ctx, req)
+	if err != nil {
+		log.Fatalf("Error: init: AccessSecretVersion: %v", err)
+	}
+	key := result.Payload.Data
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		log.Panic("init: NewCipher: %v", err)
+	}
+
+	aesGCM, err = cipher.NewGCM(block)
+	if err != nil {
+		log.Panic("init: NewGCM: %v", err)
+	}
+}
+
+func generateConnectUrl(ctx context.Context, user, name string) (string, error) {
+	// Get key first as this can fail
+	initAESKeyOnce.Do(initAESKey)
+	// Generate Token
+	newToken := Token{
+		Expiration: time.Now().UTC().Add(15 * time.Minute),
+		Id:         uuid.New().String(),
+		User:       user,
+		ServerName: name,
+	}
+	// Submit into database
+	tokenDoc := firestoreClient.Collection("Tokens").Doc(newToken.Id)
+	_, err := tokenDoc.Create(
+		ctx,
+		newToken,
+	)
+	if err != nil {
+		return "", err
+	}
+	// Use to delete in case of error
+	tokenDocUndo := func() {
+		log.Printf("Undo doc creation of %v", newToken.Id)
+		if _, err = tokenDoc.Delete(ctx); err != nil {
+			log.Printf("ERROR: Failed to delete document %v in Tokens", newToken.Id)
+		}
+	}
+	log.Printf("Inserted token %v into Collection Tokens", newToken.Id)
+	// Encrypt Token
+	rawToken, err := json.Marshal(newToken)
+	if err != nil {
+		defer tokenDocUndo()
+		return "", fmt.Errorf("Marshal: %v", err)
+	}
+	nonce := make([]byte, aesGCM.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		defer tokenDocUndo()
+		return "", fmt.Errorf("ReadFull(rand.Reader): %v", err)
+	}
+	ciphertext := aesGCM.Seal(nil, nonce, rawToken, nil)
+	token := base64.URLEncoding.EncodeToString(append(nonce, ciphertext...))
+	// Create URL
+	url := fmt.Sprintf("%v/preview?token=%v", ipFetchURL, url.QueryEscape(token))
+	return url, nil
 }

@@ -163,6 +163,13 @@ resource "google_pubsub_topic_iam_member" "member" {
   member = "serviceAccount:${google_service_account.discord_service_account.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "discord-function-member" {
+  project = var.project
+  secret_id = google_secret_manager_secret.ip-fetch-key.id
+  role = "roles/secretmanager.secretAccessor"
+  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+}
+
 module "discord_function" {
   source                = "./modules/function"
   project               = var.project
@@ -174,6 +181,8 @@ module "discord_function" {
     "COMMAND_TOPIC"    = google_pubsub_topic.command_topic.name
     "ADMIN_DISCORD_ID" = var.admin_discord_id
     "DISCORD_PUBKEY"   = var.discord_pubkey
+    "IP_FETCH_URL"     = ip_fetch_function.function.https_trigger_url
+    "KEY_SECRET_ID"    = google_secret_manager_secret.ip-fetch-key.id
   }
   source_dir            = "./discord-function"
   service_account_email = google_service_account.discord_service_account.email
