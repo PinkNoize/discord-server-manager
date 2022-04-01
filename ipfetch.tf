@@ -104,7 +104,7 @@ resource "google_project_service" "secret-service" {
 }
 
 resource "google_pubsub_topic_iam_member" "key-rotate-secret-pubsub-member" {
-  project = google_pubsub_topic.key_rotate_topic.project
+  project = google_project_service.secret-service.project
   topic = google_pubsub_topic.key_rotate_topic.name
   role = "roles/pubsub.publisher"
   member = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
