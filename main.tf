@@ -181,7 +181,7 @@ module "discord_function" {
     "COMMAND_TOPIC"    = google_pubsub_topic.command_topic.name
     "ADMIN_DISCORD_ID" = var.admin_discord_id
     "DISCORD_PUBKEY"   = var.discord_pubkey
-    "IP_FETCH_URL"     = ip_fetch_function.function.https_trigger_url
+    "IP_FETCH_URL"     = module.ip_fetch_function.function.https_trigger_url
     "KEY_SECRET_ID"    = google_secret_manager_secret.ip-fetch-key.id
   }
   source_dir            = "./discord-function"
