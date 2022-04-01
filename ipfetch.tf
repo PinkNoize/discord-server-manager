@@ -96,16 +96,16 @@ module "key_rotate_function" {
   event_resource        = "${google_pubsub_topic.key_rotate_topic.id}"
 }
 
-resource "google_project_service" "secret-service" {
-  project = var.project
-  service = "secretmanager.googleapis.com"
+resource "google_project_service_identity" "sc_sa" {
+  provider = google-beta
 
-  disable_dependent_services = false
+  project = data.google_project.project.project_id
+  service = "secretmanager.googleapis.com"
 }
 
 resource "google_pubsub_topic_iam_member" "key-rotate-secret-pubsub-member" {
-  project = google_project_service.secret-service.project
+  project = google_pubsub_topic.key_rotate_topic.project
   topic = google_pubsub_topic.key_rotate_topic.name
   role = "roles/pubsub.publisher"
-  member = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
+  member = "serviceAccount:${google_project_service_identity.sc_sa.email}"
 }
