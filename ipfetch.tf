@@ -92,12 +92,12 @@ module "key_rotate_function" {
   project               = var.project
   region                = var.region
   function_name         = "key-rotate-function"
-  function_entry_point  = ""
+  function_entry_point  = "KeyRotatePubSub"
   environment_variables = {
     "PROJECT_ID"    = var.project
     "KEY_SECRET_ID" = google_secret_manager_secret.ip-fetch-key.id
   }
-  source_dir            = ""
+  source_dir            = "./key-rotate-function"
   service_account_email = google_service_account.key_rotate_service_account.email
   event_type            = "google.pubsub.topic.publish"
   event_resource        = "${google_pubsub_topic.key_rotate_topic.id}"
