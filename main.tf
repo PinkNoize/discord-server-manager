@@ -25,6 +25,8 @@ provider "google" {
   project = var.dns_project_id
 }
 
+data "google_project" "project" {}
+
 resource "google_pubsub_topic" "command_topic" {
   name = "command-topic"
 }
