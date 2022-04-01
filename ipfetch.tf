@@ -18,6 +18,9 @@ resource "google_secret_manager_secret" "ip-fetch-key" {
     # For publication to succeed, the Secret Manager Service Agent service account must have pubsub.publisher permissions on the topic.
     name = google_pubsub_topic.key_rotate_topic.id
   }
+  depends_on  =[
+    google_pubsub_topic_iam_member.key-rotate-secret-pubsub-member # service account and mapping must be created first
+  ]
 }
 
 # Command deployer Cloud Function
