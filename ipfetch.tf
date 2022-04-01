@@ -16,7 +16,7 @@ resource "google_secret_manager_secret" "ip-fetch-key" {
   }
   topics {
     # For publication to succeed, the Secret Manager Service Agent service account must have pubsub.publisher permissions on the topic.
-    name = 
+    name = google_pubsub_topic.key_rotate_topic.id
   }
 }
 
