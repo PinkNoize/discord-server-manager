@@ -85,6 +85,7 @@ func KeyRotatePubSub(ctx context.Context, m PubSubMessage) error {
 			if err != nil {
 				return fmt.Errorf("DestroySecretVersion: %v", err)
 			}
+			log.Printf("Destroyed %v", name)
 		}
 		return nil
 	default:
