@@ -13,6 +13,7 @@ resource "google_secret_manager_secret" "ip-fetch-key" {
   }
   rotation {
     rotation_period = "7889238s" # 3 months
+    next_rotation_time = timeadd(time_static.create_time.rfc3339, "5m")
   }
   topics {
     # For publication to succeed, the Secret Manager Service Agent service account must have pubsub.publisher permissions on the topic.
@@ -22,6 +23,8 @@ resource "google_secret_manager_secret" "ip-fetch-key" {
     google_pubsub_topic_iam_member.key-rotate-secret-pubsub-member # service account and mapping must be created first
   ]
 }
+
+resource "time_static" "create_time" {}
 
 # Command deployer Cloud Function
 resource "google_service_account" "ip_fetch_service_account" {
