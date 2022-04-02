@@ -93,7 +93,7 @@ func returnClientRedirect(w http.ResponseWriter, token string) {
 		<title>Connecting...</title>
 	  </head>
 	  <body>
-	  	<script>window.location.replace("/?tokenid=%v");</script>
+	  	<script>window.location.replace(window.location.pathname.concat("?tokenid=%v"));</script>
 	  </body>
 	</html>`, token)
 
