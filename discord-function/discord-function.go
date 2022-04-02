@@ -673,6 +673,6 @@ func generateConnectUrl(ctx context.Context, user, name string) (string, error) 
 	ciphertext := aesGCM.Seal(nil, nonce, rawToken, nil)
 	token := base64.URLEncoding.EncodeToString(append(nonce, ciphertext...))
 	// Create URL
-	url := fmt.Sprintf("%v/?preview=true&token=%v", ipFetchURL, url.QueryEscape(token))
+	url := fmt.Sprintf("%v?preview=true&tokenid=%v", ipFetchURL, url.QueryEscape(token))
 	return url, nil
 }

@@ -93,7 +93,7 @@ func returnClientRedirect(w http.ResponseWriter, token string) {
 		<title>Connecting...</title>
 	  </head>
 	  <body>
-	  	<script>window.location.replace("/?token=%v");</script>
+	  	<script>window.location.replace("/?tokenid=%v");</script>
 	  </body>
 	</html>`, token)
 
@@ -102,7 +102,7 @@ func returnClientRedirect(w http.ResponseWriter, token string) {
 // Entry function
 func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 
-	tokenParam, ok := r.URL.Query()["token"]
+	tokenParam, ok := r.URL.Query()["tokenid"]
 	if !ok || len(tokenParam) < 1 {
 		log.Printf("Token not supplied")
 		http.Error(w, "Missing query parameter", http.StatusUnprocessableEntity)
@@ -115,7 +115,7 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 	rawToken, err := base64.URLEncoding.DecodeString(tokenParam[0])
 	if err != nil {
 		log.Printf("Token not valid base64: %v", err)
-		http.Error(w, "Invalid parameter: token", http.StatusBadRequest)
+		http.Error(w, "Invalid parameter: tokenid", http.StatusBadRequest)
 		return
 	}
 	nonce := rawToken[:aesGCM.NonceSize()]
@@ -124,14 +124,14 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
 		log.Printf("Invalid plaintext: %v", err)
-		http.Error(w, "Invalid token", http.StatusBadRequest)
+		http.Error(w, "Invalid tokenid", http.StatusBadRequest)
 		return
 	}
 	var token Token
 	err = json.Unmarshal(plaintext, &token)
 	if err != nil {
 		log.Printf("Invalid JSON: %v", err)
-		http.Error(w, "Invalid token", http.StatusBadRequest)
+		http.Error(w, "Invalid tokenid", http.StatusBadRequest)
 		return
 	}
 
@@ -146,7 +146,7 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		log.Printf("Token expired: %v %v", token.Id, token.Expiration)
-		http.Error(w, "Invalid token", http.StatusBadRequest)
+		http.Error(w, "Invalid tokenid", http.StatusBadRequest)
 		return
 	}
 }
