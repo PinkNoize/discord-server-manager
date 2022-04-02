@@ -24,7 +24,7 @@ resource "google_secret_manager_secret" "ip-fetch-key" {
   ]
   lifecycle {
     ignore_changes = [
-      rotation.next_rotation_time,    
+      rotation[0].next_rotation_time,    
     ]  
   }
 }
