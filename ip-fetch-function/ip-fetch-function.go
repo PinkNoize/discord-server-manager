@@ -108,7 +108,7 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing query parameter", http.StatusUnprocessableEntity)
 		return
 	}
-	if r.URL.Path == "/preview" {
+	if _, preview := r.URL.Query()["preview"]; preview {
 		returnClientRedirect(w, tokenParam[0])
 		return
 	}
