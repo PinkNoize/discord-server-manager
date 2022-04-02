@@ -74,6 +74,16 @@ module "ip_fetch_function" {
   ingress_settings      = "ALLOW_ALL"
 }
 
+# IAM entry for all users to invoke the function
+resource "google_cloudfunctions_function_iam_member" "ip-fetch-invoker" {
+  project        = module.ip_fetch_function.function.project
+  region         = module.ip_fetch_function.function.region
+  cloud_function = module.ip_fetch_function.function.name
+
+  role   = "roles/cloudfunctions.invoker"
+  member = "allUsers"
+}
+
 # Key Rotation Function REsources
 resource "google_pubsub_topic" "key_rotate_topic" {
   name = "key-rotate-topic"
