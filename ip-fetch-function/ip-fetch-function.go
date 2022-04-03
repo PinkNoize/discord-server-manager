@@ -10,7 +10,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -93,7 +92,13 @@ func returnClientRedirect(w http.ResponseWriter, token string) {
 		<title>Connecting...</title>
 	  </head>
 	  <body>
-	  	<script>window.location.replace(window.location.pathname.concat("?tokenid=%v"));</script>
+	  	<script>
+		  fetch('https://api.ipify.org/?format=json')
+  			.then(response => response.json())
+  			.then(data => {
+				window.location.replace(window.location.pathname.concat("?tokenid=%v&ip=" + data.ip));
+  			});
+		</script>
 	  </body>
 	</html>`, token)
 
@@ -112,6 +117,13 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 		returnClientRedirect(w, tokenParam[0])
 		return
 	}
+	remoteIPs, ok := r.URL.Query()["ip"]
+	if !ok || len(remoteIPs) < 1 {
+		log.Printf("ip not supplied")
+		http.Error(w, "Missing query parameter", http.StatusUnprocessableEntity)
+		return
+	}
+	remoteIP := remoteIPs[0]
 	rawToken, err := base64.URLEncoding.DecodeString(tokenParam[0])
 	if err != nil {
 		log.Printf("Token not valid base64: %v", err)
@@ -139,8 +151,7 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	if !now.After(token.Expiration) {
 		log.Printf("Token still valid: %v", token.Id)
-		remoteAddr := getRemoteAddr(r)
-		err = handleValidToken(r.Context(), remoteAddr, &token)
+		err = handleValidToken(r.Context(), remoteIP, &token)
 		if err != nil {
 			log.Printf("handleValidToken: %v", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -154,25 +165,12 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 	  <body>
 	  	Connected to %v with %v.
 	  </body>
-	</html>`, token.ServerName, remoteAddr)
+	</html>`, token.ServerName, remoteIP)
 	} else {
 		log.Printf("Token expired: %v %v", token.Id, token.Expiration)
 		http.Error(w, "Invalid tokenid", http.StatusBadRequest)
 		return
 	}
-}
-
-func getRemoteAddr(r *http.Request) string {
-	ip := r.Header.Get("x-forwarded-for")
-	if ip == "" {
-		ip = r.Header.Get("x-appengine-user-ip")
-		log.Printf("IP found in 'x-appengine-user-ip': %v", ip)
-	}
-	if ip == "" {
-		ip = strings.Split(r.RemoteAddr, ":")[0]
-		log.Printf("error: No IP found, setting to local: %v", ip)
-	}
-	return ip
 }
 
 func getTokenEntry(ctx context.Context, id string) (*Token, error) {
