@@ -154,27 +154,21 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 func getTokenEntry(ctx context.Context, id string) (*Token, error) {
 	tokenDocRef := firestoreClient.Collection("Tokens").Doc(id)
 	token := Token{}
-	err := firestoreClient.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
-		var err error
-		tokenDoc, err := tx.Get(tokenDocRef)
-		if err != nil {
-			return err
-		}
-		if !tokenDoc.Exists() {
-			return fmt.Errorf("token %v does not exist", id)
-		}
-		err = tokenDoc.DataTo(&token)
-		if err != nil {
-			return err
-		}
-		err = tx.Delete(tokenDocRef)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
+	var err error
+	tokenDoc, err := tokenDocRef.Get(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("RunTransaction: %v", err)
+		return nil, fmt.Errorf("get: %v", err)
+	}
+	if !tokenDoc.Exists() {
+		return nil, fmt.Errorf("token %v does not exist", id)
+	}
+	err = tokenDoc.DataTo(&token)
+	if err != nil {
+		return nil, fmt.Errorf("DataTo: %v", err)
+	}
+	_, err = tokenDocRef.Delete(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete: %v", err)
 	}
 	return &token, nil
 }
