@@ -47,7 +47,7 @@ resource "google_secret_manager_secret_iam_member" "ip-fetch-member" {
 resource "google_project_iam_member" "ip-fetch-firestore-iam" {
   project = var.project
   role    = "roles/datastore.user"
-  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+  member = "serviceAccount:${google_service_account.ip_fetch_account.email}"
 }
 
 resource "google_pubsub_topic_iam_member" "ip-fetch-pubsub-member" {

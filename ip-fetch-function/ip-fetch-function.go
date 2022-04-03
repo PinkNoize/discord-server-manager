@@ -138,6 +138,7 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 	// Check if token is still valid
 	now := time.Now().UTC()
 	if !now.After(token.Expiration) {
+		log.Printf("Token still valid: %v", token.Id)
 		err = handleValidToken(r.Context(), r.RemoteAddr, &token)
 		if err != nil {
 			log.Printf("handleValidToken: %v", err)
@@ -182,6 +183,7 @@ func handleValidToken(ctx context.Context, remoteAddr string, token *Token) erro
 		return fmt.Errorf("passed token did not match server token")
 	}
 	remoteIP := strings.Split(remoteAddr, ":")[0]
+	log.Printf("Adding %v to server %v", remoteIP, remoteToken.ServerName)
 	pubSubData, err := json.Marshal(ForwardPubSub{
 		Command:     "add-user-ip",
 		Interaction: nil,
