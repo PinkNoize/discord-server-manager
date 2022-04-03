@@ -139,17 +139,40 @@ func IPFetchEntry(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	if !now.After(token.Expiration) {
 		log.Printf("Token still valid: %v", token.Id)
-		err = handleValidToken(r.Context(), r.RemoteAddr, &token)
+		remoteAddr := getRemoteAddr(r)
+		err = handleValidToken(r.Context(), remoteAddr, &token)
 		if err != nil {
 			log.Printf("handleValidToken: %v", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+		fmt.Fprintf(w, `<!DOCTYPE html>
+	<html lang="en">
+	  <head>
+		<title>Connected</title>
+	  </head>
+	  <body>
+	  	Connected to %v with %v.
+	  </body>
+	</html>`, token.ServerName, remoteAddr)
 	} else {
 		log.Printf("Token expired: %v %v", token.Id, token.Expiration)
 		http.Error(w, "Invalid tokenid", http.StatusBadRequest)
 		return
 	}
+}
+
+func getRemoteAddr(r *http.Request) string {
+	ip := r.Header.Get("x-forwarded-for")
+	if ip == "" {
+		ip = r.Header.Get("x-appengine-user-ip")
+		log.Printf("IP found in 'x-appengine-user-ip': %v", ip)
+	}
+	if ip == "" {
+		ip = strings.Split(r.RemoteAddr, ":")[0]
+		log.Printf("error: No IP found, setting to local: %v", ip)
+	}
+	return ip
 }
 
 func getTokenEntry(ctx context.Context, id string) (*Token, error) {
@@ -187,8 +210,7 @@ func handleValidToken(ctx context.Context, remoteAddr string, token *Token) erro
 		!remoteToken.Expiration.Round(time.Millisecond).Equal(token.Expiration.Round(time.Millisecond)) {
 		return fmt.Errorf("passed token did not match server token")
 	}
-	remoteIP := strings.Split(remoteAddr, ":")[0]
-	log.Printf("Adding %v to server %v", remoteIP, remoteToken.ServerName)
+	log.Printf("Adding %v to server %v", remoteAddr, remoteToken.ServerName)
 	pubSubData, err := json.Marshal(ForwardPubSub{
 		Command:     "add-user-ip",
 		Interaction: nil,
@@ -200,7 +222,7 @@ func handleValidToken(ctx context.Context, remoteAddr string, token *Token) erro
 		Data: pubSubData,
 		Attributes: map[string]string{
 			"name": remoteToken.ServerName,
-			"ip":   remoteIP,
+			"ip":   remoteAddr,
 			"user": remoteToken.User,
 		},
 	})
