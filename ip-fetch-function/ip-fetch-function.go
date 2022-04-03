@@ -181,7 +181,10 @@ func handleValidToken(ctx context.Context, remoteAddr string, token *Token) erro
 	}
 	log.Printf("Token: %+v", *token)
 	log.Printf("RemoteToken: %+v", *remoteToken)
-	if *remoteToken != *token {
+	if remoteToken.Id == token.Id &&
+		remoteToken.ServerName == token.ServerName &&
+		remoteToken.User == token.User &&
+		remoteToken.Expiration.Round(time.Millisecond).Equal(token.Expiration.Round(time.Millisecond)) {
 		return fmt.Errorf("passed token did not match server token")
 	}
 	remoteIP := strings.Split(remoteAddr, ":")[0]
