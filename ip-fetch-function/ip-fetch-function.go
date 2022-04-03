@@ -179,6 +179,8 @@ func handleValidToken(ctx context.Context, remoteAddr string, token *Token) erro
 	if err != nil {
 		return fmt.Errorf("getTokenEntry: %v", err)
 	}
+	log.Printf("Token: %+v", *token)
+	log.Printf("RemoteToken: %+v", *remoteToken)
 	if *remoteToken != *token {
 		return fmt.Errorf("passed token did not match server token")
 	}
