@@ -78,7 +78,7 @@ resource "google_cloudbuild_trigger" "build-trigger" {
 resource "google_project_service_identity" "cb_sa" {
   provider = google-beta
 
-  project = data.google_project.project.project_id
+  project = var.project
   service = "cloudbuild.googleapis.com"
 }
 
