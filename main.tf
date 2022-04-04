@@ -54,6 +54,12 @@ resource "google_project_iam_member" "cloudbuild-cf-member" {
   member = "serviceAccount:${google_project_service_identity.cb_sa.email}"
 }
 
+resource "google_project_iam_member" "cloudbuild-sa-member" {
+  project = google_project_service_identity.cb_sa.project
+  role = "roles/iam.serviceAccountUser"
+  member = "serviceAccount:${google_project_service_identity.cb_sa.email}"
+}
+
 # Discord API secret
 resource "google_secret_manager_secret" "secret-basic" {
   secret_id = "discord-api-secret"
