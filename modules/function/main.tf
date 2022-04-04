@@ -16,6 +16,10 @@ resource "google_project_service" "cb" {
   disable_on_destroy         = false
 }
 
+locals {
+  repo_url = "https://source.developers.google.com/projects/${var.project}/repos/${var.repository}/moveable-aliases/${var.branch}/paths/${var.source_dir}"
+}
+
 # Create Cloud Function
 resource "google_cloudfunctions_function" "function" {
   name    = var.function_name
@@ -24,7 +28,7 @@ resource "google_cloudfunctions_function" "function" {
 
   available_memory_mb   = 128
   source_repository {
-    url = "https://source.developers.google.com/projects/${var.project}/repos/${var.repository}/moveable-aliases/${var.branch}/paths/${var.source_dir}"
+    url = local.repo_url
   }
   trigger_http          = var.trigger_http
   ingress_settings      = var.ingress_settings
@@ -38,6 +42,34 @@ resource "google_cloudfunctions_function" "function" {
     content {
       event_type = var.event_type
       resource   = var.event_resource
+    }
+  }
+}
+
+# Cloudbuild trigger for function
+resource "google_cloudbuild_trigger" "build-trigger" {
+  trigger_template {
+    project_id  = var.project
+    branch_name = "^${var.branch}$"
+    repo_name   = var.repository
+    dir         = var.source_dir
+  }
+  included_files = [ "${var.source_dir}/**" ]
+  build {
+    step {
+      name = "gcr.io/google.com/cloudsdktool/cloud-sdk"
+      args = ["gcloud", "functions", "deploy", "${google_cloudfunctions_function.function.name}", "--region=${google_cloudfunctions_function.function.region}", "--source=${local.repo_url}"]
+      dir  = var.source_dir
+      timeout = "10m"
+    }
+
+    source {
+      repo_source {
+        project_id  = var.project
+        branch_name = "^${var.branch}$"
+        repo_name   = var.repository
+        dir         = var.source_dir
+      }
     }
   }
 }
