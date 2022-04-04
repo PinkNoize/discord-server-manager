@@ -24,7 +24,7 @@ resource "google_cloudfunctions_function" "function" {
 
   available_memory_mb   = 128
   source_repository {
-    url = "https://source.cloud.google.com/projects/${var.project}/repos/${var.repository}/moveable-aliases/${var.branch}/paths/${var.source_dir}"
+    url = "https://source.developers.google.com/projects/${var.project}/repos/${var.repository}/moveable-aliases/${var.branch}/paths/${var.source_dir}"
   }
   trigger_http          = var.trigger_http
   ingress_settings      = var.ingress_settings
