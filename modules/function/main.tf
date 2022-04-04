@@ -83,7 +83,7 @@ resource "google_project_service_identity" "cb_sa" {
 }
 
 resource "google_project_iam_member" "cloudbuild-cf-member" {
-  project = google_pubsub_topic.cb_sa.project
+  project = google_project_service_identity.cb_sa.project
   role = "roles/cloudfunctions.developer"
   member = "serviceAccount:${google_project_service_identity.cb_sa.email}"
 }
