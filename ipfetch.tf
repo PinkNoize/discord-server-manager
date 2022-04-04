@@ -68,7 +68,9 @@ module "ip_fetch_function" {
     "COMMAND_TOPIC" = google_pubsub_topic.command_topic.name
     "KEY_SECRET_ID" = google_secret_manager_secret.ip-fetch-key.id
   }
-  source_dir            = "./ip-fetch-function"
+  repository            = var.repository
+  branch                = "main"
+  source_dir            = "ip-fetch-function"
   service_account_email = google_service_account.ip_fetch_service_account.email
   trigger_http          = true
   ingress_settings      = "ALLOW_ALL"
@@ -111,7 +113,9 @@ module "key_rotate_function" {
     "PROJECT_ID"    = var.project
     "KEY_SECRET_ID" = google_secret_manager_secret.ip-fetch-key.id
   }
-  source_dir            = "./key-rotate-function"
+  repository            = var.repository
+  branch                = "main"
+  source_dir            = "key-rotate-function"
   service_account_email = google_service_account.key_rotate_service_account.email
   event_type            = "google.pubsub.topic.publish"
   event_resource        = "${google_pubsub_topic.key_rotate_topic.id}"

@@ -3,6 +3,7 @@ variable "region" {}
 variable "function_name" {}
 variable "function_entry_point" {}
 variable "source_dir" {}
+variable "repository" {}
 variable "environment_variables" {}
 variable "service_account_email" {
     default = null

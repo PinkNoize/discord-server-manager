@@ -119,7 +119,9 @@ module "command_function" {
     "DISCORD_APPID"     = var.discord_app_id
     "DISCORD_SECRET_ID" = google_secret_manager_secret.secret-basic.id
   }
-  source_dir            = "./server-manager"
+  repository            = var.repository
+  branch                = "main"
+  source_dir            = "server-manager"
   service_account_email = google_service_account.service_account.email
   event_type            = "google.pubsub.topic.publish"
   event_resource        = "${google_pubsub_topic.command_topic.id}"
@@ -186,7 +188,9 @@ module "discord_function" {
     "IP_FETCH_URL"     = module.ip_fetch_function.function.https_trigger_url
     "KEY_SECRET_ID"    = google_secret_manager_secret.ip-fetch-key.id
   }
-  source_dir            = "./discord-function"
+  repository            = var.repository
+  branch                = "main"
+  source_dir            = "discord-function"
   service_account_email = google_service_account.discord_service_account.email
   trigger_http          = true
   ingress_settings      = "ALLOW_ALL"
@@ -226,7 +230,9 @@ module "discord_deploy_function" {
     "DISCORD_APPID"    = var.discord_app_id
     "DISCORD_SECRET_ID" = google_secret_manager_secret.secret-basic.id
   }
-  source_dir            = "./discord-function"
+  repository            = var.repository
+  branch                = "main"
+  source_dir            = "discord-function"
   service_account_email = google_service_account.discord_deploy_service_account.email
   trigger_http          = true
   ingress_settings      = "ALLOW_INTERNAL_ONLY"

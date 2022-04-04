@@ -1,30 +1,3 @@
-resource "random_id" "fileid" {
-  byte_length = 32
-}
-
-# Compress source code
-data "archive_file" "source" {
-  type             = "zip"
-  source_dir       = var.source_dir
-  output_path      = "/tmp/${var.function_name}-${random_id.fileid.hex}.zip"
-  output_file_mode = "0666"
-}
-
-# Create bucket that will host the source code
-resource "google_storage_bucket" "bucket" {
-  name = "${var.project}-${var.function_name}"
-  location = var.region
-}
-
-# Add source code zip to bucket
-resource "google_storage_bucket_object" "zip" {
-  # Append file MD5 to force bucket to be recreated
-  name     = "source.zip#${data.archive_file.source.output_md5}"
-  bucket   = google_storage_bucket.bucket.name
-  metadata = {}
-  source   = data.archive_file.source.output_path
-}
-
 # Enable Cloud Functions API
 resource "google_project_service" "cf" {
   project = var.project
@@ -50,8 +23,9 @@ resource "google_cloudfunctions_function" "function" {
   runtime = "go116"
 
   available_memory_mb   = 128
-  source_archive_bucket = google_storage_bucket.bucket.name
-  source_archive_object = google_storage_bucket_object.zip.name
+  source_repository {
+    url = "https://source.cloud.google.com/projects/${var.project}/repos/${var.repository}/moveable-aliases/${var.branch}/paths/${var.source_dir}"
+  }
   trigger_http          = var.trigger_http
   ingress_settings      = var.ingress_settings
   entry_point           = var.function_entry_point
