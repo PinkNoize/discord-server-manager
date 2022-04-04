@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/big"
 
-	"github.com/google/uuid"
+	"github.com/sony/sonyflake"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
@@ -247,15 +248,27 @@ func generateServerTag(name string) string {
 	return fmt.Sprintf("server-%v", name)
 }
 
+func toBase62(id uint64) string {
+	var i big.Int
+	i.SetUint64(id)
+	return i.Text(62)
+}
+
 func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
-	fwname := fmt.Sprintf("%v-%v-%v", s.Name, user, uuid.NewString())
+	flake := sonyflake.NewSonyflake(sonyflake.Settings{})
+	flakeID, err := flake.NextID()
+	if err != nil {
+		return fmt.Errorf("flake.NextID: %v", err)
+	}
+	id := toBase62(flakeID)
+	fwname := fmt.Sprintf("%v-%v", user, id)
 	serverTag := generateServerTag(s.Name)
 
 	var allowedPorts []string
 	for _, p := range s.Ports {
 		allowedPorts = append(allowedPorts, fmt.Sprintf("%v", p))
 	}
-	_, err := computeClient.Firewalls.Insert(
+	_, err = computeClient.Firewalls.Insert(
 		projectID,
 		&compute.Firewall{
 			Allowed: []*compute.FirewallAllowed{

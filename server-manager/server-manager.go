@@ -402,6 +402,7 @@ func commandAddUserIP(ctx context.Context, args *addUserIPArgs) error {
 	if err != nil {
 		return fmt.Errorf("serverFromName failed: %v", err)
 	}
+	log.Printf("Adding %s to %s as %s", *args.IP, *args.Name, *args.User)
 	err = server.AddUserIP(ctx, *args.User, *args.IP)
 	if err != nil {
 		return fmt.Errorf("failed AddUserIP: %v", err)
