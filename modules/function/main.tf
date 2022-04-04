@@ -75,19 +75,6 @@ resource "google_cloudbuild_trigger" "build-trigger" {
   }
 }
 
-resource "google_project_service_identity" "cb_sa" {
-  provider = google-beta
-
-  project = var.project
-  service = "cloudbuild.googleapis.com"
-}
-
-resource "google_project_iam_member" "cloudbuild-cf-member" {
-  project = google_project_service_identity.cb_sa.project
-  role = "roles/cloudfunctions.developer"
-  member = "serviceAccount:${google_project_service_identity.cb_sa.email}"
-}
-
 output "function" {
   value = google_cloudfunctions_function.function
 }

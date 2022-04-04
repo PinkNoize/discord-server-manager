@@ -40,6 +40,20 @@ resource "google_project_service" "comp" {
   disable_on_destroy         = false
 }
 
+# Give cloudbuild access to cloud functions
+resource "google_project_service_identity" "cb_sa" {
+  provider = google-beta
+
+  project = var.project
+  service = "cloudbuild.googleapis.com"
+}
+
+resource "google_project_iam_member" "cloudbuild-cf-member" {
+  project = google_project_service_identity.cb_sa.project
+  role = "roles/cloudfunctions.developer"
+  member = "serviceAccount:${google_project_service_identity.cb_sa.email}"
+}
+
 # Discord API secret
 resource "google_secret_manager_secret" "secret-basic" {
   secret_id = "discord-api-secret"
