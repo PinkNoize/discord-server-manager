@@ -48,6 +48,7 @@ resource "google_cloudfunctions_function" "function" {
 
 # Cloudbuild trigger for function
 resource "google_cloudbuild_trigger" "build-trigger" {
+  name = "${google_cloudfunctions_function.function.name}-trigger"
   trigger_template {
     project_id  = var.project
     branch_name = "^${var.branch}$"
