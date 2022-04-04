@@ -301,6 +301,7 @@ func commandCreateServer(ctx context.Context, args *createServerArgs) (*server, 
 		}
 		ports = append(ports, uint16(tmp))
 	}
+	log.Printf("Creating %v (%v) - %v", *args.Name, *args.MachineType, *args.Subdomain)
 	return CreateServer(
 		ctx,
 		*args.Name,
