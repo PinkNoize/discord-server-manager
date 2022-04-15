@@ -156,6 +156,30 @@ func (p PermissionManager) RemoveUserFromServer(user, server string) (bool, erro
 	return success, err
 }
 
+func (p PermissionManager) GetServersForUser(user string) []string {
+	log.Printf("Getting servers for %v", user)
+	n := 0
+	allRoles := p.enforcer.GetAllUsersByDomain("server")
+	for _, role := range allRoles {
+		if strings.HasSuffix(role, "_role") {
+			serverName := RoleToServerName(role)
+			access, err := p.CheckServerOp(user, serverName, "start")
+			if err != nil {
+				log.Printf("error: GetServersForUser: CheckServerOp: %v", err)
+			} else if access {
+				allRoles[n] = serverName
+				n++
+			}
+		}
+	}
+	allRoles = allRoles[:n]
+	return allRoles
+}
+
+func RoleToServerName(name string) string {
+	return strings.TrimSuffix(name, "_role")
+}
+
 func ServerNameToRole(name string) string {
 	return fmt.Sprintf("%v_role", name)
 }

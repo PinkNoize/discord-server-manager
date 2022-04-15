@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,6 +111,9 @@ type addUserIPArgs struct {
 	Name *string `json:"name"`
 	IP   *string `json:"ip"`
 	User *string `json:"user"`
+}
+type statusArgs struct {
+	Servers *string `json:"servers"`
 }
 
 func SendDiscordInteractionResponse(token string, response *discordgo.WebhookParams) error {
@@ -270,6 +274,26 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 			args.IP,
 			args.Name,
 		)
+	case "status":
+		args := statusArgs{}
+		err := json.Unmarshal(m.Attributes, &args)
+		if err != nil {
+			response.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
+			return fmt.Errorf("error parsing statusArgs: %v", err)
+		}
+		embeds, err := commandStatus(ctx, &args)
+		if err != nil {
+			response.Content = fmt.Sprintf(
+				"Failed to get status: %v",
+				err,
+			)
+			return fmt.Errorf("status failed: %v", err)
+		}
+		response.Content = ""
+		response.Embeds = embeds
 	default:
 		response.Content = fmt.Sprintf(
 			"Command not recognized: %v",
@@ -409,4 +433,64 @@ func commandAddUserIP(ctx context.Context, args *addUserIPArgs) error {
 		return fmt.Errorf("failed AddUserIP: %v", err)
 	}
 	return nil
+}
+
+func commandStatus(ctx context.Context, args *statusArgs) ([]*discordgo.MessageEmbed, error) {
+	if args.Servers == nil {
+		return nil, fmt.Errorf("server not specified")
+	}
+	serversList := strings.Split(*args.Servers, ",")
+	if len(serversList) < 1 {
+		return nil, fmt.Errorf("no servers specified")
+	}
+	sort.Strings(serversList)
+	var servers map[string]*server
+	for i := range serversList {
+		s, err := ServerFromName(ctx, serversList[i])
+		if err != nil {
+			log.Printf("error: commandStatus: ServerFromName: %v", err)
+			servers[serversList[i]] = nil
+		} else {
+			servers[serversList[i]] = s
+		}
+	}
+	var embeds []*discordgo.MessageEmbed
+	for _, key := range serversList {
+		serverInfo := servers[key]
+		if serverInfo == nil {
+			embeds = append(embeds, &discordgo.MessageEmbed{
+				Title:       key,
+				Type:        discordgo.EmbedTypeRich,
+				Description: "Unable to get status",
+			})
+		} else {
+			var statusString string
+			var domainString string
+
+			status, err := serverInfo.Status(ctx)
+			if err != nil {
+				log.Printf("error: commandStatus: Status: %v", err)
+				statusString = "Unable to get status"
+			} else {
+				statusString = status.String()
+			}
+			domainString = serverInfo.DnsName()
+
+			embeds = append(embeds, &discordgo.MessageEmbed{
+				Title: key,
+				Type:  discordgo.EmbedTypeRich,
+				Fields: []*discordgo.MessageEmbedField{
+					{
+						Name:  "Status",
+						Value: statusString,
+					},
+					{
+						Name:  "Domain",
+						Value: domainString,
+					},
+				},
+			})
+		}
+	}
+	return embeds, nil
 }

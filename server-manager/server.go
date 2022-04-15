@@ -30,6 +30,32 @@ const (
 	TERMINATED
 	UNKNOWN
 )
+
+func (ss ServerStatus) String() string {
+	switch ss {
+	case DEPROVISIONING:
+		return "DEPROVISIONING"
+	case PROVISIONING:
+		return "PROVISIONING"
+	case REPAIRING:
+		return "REPAIRING"
+	case RUNNING:
+		return "RUNNING"
+	case STAGING:
+		return "STAGING"
+	case STOPPED:
+		return "STOPPED"
+	case STOPPING:
+		return "STOPPING"
+	case SUSPENDED:
+		return "SUSPENDED"
+	case TERMINATED:
+		return "TERMINATED"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 const publicInterfaceName string = "External NAT"
 
 type server struct {
@@ -261,6 +287,7 @@ func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
 	flakeIDbyte := make([]byte, 8)
 	binary.BigEndian.PutUint64(flakeIDbyte, flakeID)
 	id := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(flakeIDbyte))
+	// Must start with letter
 	fwname := fmt.Sprintf("fw-%v-%v", user, id)
 	serverTag := generateServerTag(s.Name)
 

@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -453,6 +454,85 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				},
 			}, nil
 		}
+	case "status":
+		args := optionsToMap(subcmd.Options)
+		nameIface, ok := args["name"]
+		var servers []string
+		if !ok {
+			log.Printf("User requested the status for all servers")
+			// Return results for all valid servers
+			servers = permsChecker.GetServersForUser(userID)
+			if len(servers) < 1 {
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("You do not have access to any servers."),
+						Embeds: []*discordgo.MessageEmbed{
+							{
+								Type: discordgo.EmbedTypeImage,
+								Image: &discordgo.MessageEmbedImage{
+									URL: "https://cdn.discordapp.com/attachments/561082316689244162/964590315501666374/unknown.png",
+								},
+							},
+						},
+						Flags: uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+		} else {
+			// Check if user has permission to access the server
+			log.Printf("%v requested the status for %v", userID, nameIface.StringValue())
+			allowed, err := permsChecker.CheckServerOp(userID, nameIface.StringValue(), "start")
+			if err != nil {
+				log.Printf("ERROR: CheckServerOp: %v", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Internal Server Error",
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+			if !allowed {
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("You do not have access to %v or it does not exist\nhttps://cdn.discordapp.com/attachments/561082316689244162/964590315501666374/unknown.png", nameIface.StringValue()),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			} else {
+				servers = append(servers, nameIface.StringValue())
+			}
+		}
+		// Forward to command lambda
+		pubSubData, err := json.Marshal(ForwardPubSub{
+			Command:     "status",
+			Interaction: &rawInteraction,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("jsonMarshal: %v", err)
+		}
+		serverCSV := strings.Join(servers, ",")
+		log.Printf("Requesting status for %v", serverCSV)
+		result := commandTopic.Publish(ctx, &pubsub.Message{
+			Data: pubSubData,
+			Attributes: map[string]string{
+				"servers": serverCSV,
+			},
+		})
+		_, err = result.Get(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("Pubsub.Publish: %v", err)
+		}
+		log.Printf("Deferred response")
+		return &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
+			Data: &discordgo.InteractionResponseData{
+				Content: "...",
+				Flags:   uint64(discordgo.MessageFlagsEphemeral),
+			},
+		}, nil
 	default:
 		log.Printf("Command `%v` not implemented for server.", subcmd.Name)
 		return &discordgo.InteractionResponse{
