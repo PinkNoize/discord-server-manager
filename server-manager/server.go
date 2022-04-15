@@ -261,7 +261,7 @@ func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
 	flakeIDbyte := make([]byte, 8)
 	binary.BigEndian.PutUint64(flakeIDbyte, flakeID)
 	id := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(flakeIDbyte))
-	fwname := fmt.Sprintf("%v-%v", user, id)
+	fwname := fmt.Sprintf("fw-%v-%v", user, id)
 	serverTag := generateServerTag(s.Name)
 
 	var allowedPorts []string
