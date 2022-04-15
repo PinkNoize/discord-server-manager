@@ -2,9 +2,11 @@ package server_manager
 
 import (
 	"context"
+	"encoding/base32"
+	"encoding/binary"
 	"fmt"
 	"log"
-	"math/big"
+	"strings"
 
 	"github.com/sony/sonyflake"
 	"google.golang.org/api/compute/v1"
@@ -248,12 +250,6 @@ func generateServerTag(name string) string {
 	return fmt.Sprintf("server-%v", name)
 }
 
-func toBase62(id uint64) string {
-	var i big.Int
-	i.SetUint64(id)
-	return i.Text(62)
-}
-
 func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
 	flake := sonyflake.NewSonyflake(sonyflake.Settings{
 		MachineID: func() (uint16, error) { return 0x6969, nil },
@@ -262,7 +258,9 @@ func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
 	if err != nil {
 		return fmt.Errorf("flake.NextID: %v", err)
 	}
-	id := toBase62(flakeID)
+	flakeIDbyte := make([]byte, 8)
+	binary.BigEndian.PutUint64(flakeIDbyte, flakeID)
+	id := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(flakeIDbyte))
 	fwname := fmt.Sprintf("%v-%v", user, id)
 	serverTag := generateServerTag(s.Name)
 
