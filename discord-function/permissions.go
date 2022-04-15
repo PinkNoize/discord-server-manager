@@ -123,6 +123,16 @@ func (p PermissionManager) DeleteServerPermissions(server string) (bool, error) 
 	if !success {
 		log.Printf("WARN: %v did not have any permissions but tried to delete them", roleName)
 	}
+	users := p.enforcer.GetUsersForRoleInDomain(roleName, "server")
+	for user := range users {
+		success, err = p.enforcer.DeleteRoleForUserInDomain(user, roleName, "server")
+		if err != nil {
+			return false, fmt.Errorf("DeleteRoleForUserInDomain(%v,%v, \"server\"): %v", user, roleName, err)
+		}
+		if !success {
+			log.Printf("WARN: %v did not have any permissions but tried to delete them", roleName)
+		}
+	}
 	return success, nil
 }
 

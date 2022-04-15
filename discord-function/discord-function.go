@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -46,6 +47,8 @@ type ForwardPubSub struct {
 	Command     string  `json:"command"`
 	Interaction *[]byte `json:"interaction,omitempty"`
 }
+
+var isValidName = regexp.MustCompile(`^[a-zA-Z0-9\-]+$`).MatchString
 
 func init() {
 	var err error
@@ -237,7 +240,26 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			// TODO: validate name, subdomain, machineType, ports
+			if !isValidName(name) {
+				log.Printf("Invalid server name: %v", name)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Invalid server name. Server names can only contain letters, numbers, and -",
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+			if !isValidName(subdomain) {
+				log.Printf("Invalid subdomain: %v", subdomain)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Invalid subdomain. Subdomains can only contain letters, numbers, and -",
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
 			pubSubData, err := json.Marshal(ForwardPubSub{
 				Command:     "create",
 				Interaction: &rawInteraction,
@@ -306,6 +328,16 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
+			if !serverExists(name) {
+				log.Printf("Server %v does not exist", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Server %v does not exist", name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
 			pubSubData, err := json.Marshal(ForwardPubSub{
 				Command:     subcmd.Name,
 				Interaction: &rawInteraction,
@@ -376,7 +408,16 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			// TODO: check if server exists
+			if !serverExists(name) {
+				log.Printf("Server %v does not exist", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Server %v does not exist", name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
 			connectUrl, err := generateConnectUrl(ctx, userID, name)
 			if err != nil {
 				log.Printf("ERROR: generateConnectUrl: %v", err)
@@ -458,7 +499,16 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			// TODO: Check existence of server
+			if !serverExists(name) {
+				log.Printf("Server %v does not exist", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Server %v does not exist", name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
 			success, err := permsChecker.AddUserToServer(targetUser.ID, name)
 			if err != nil {
 				log.Printf("AddUserToServer: %v", err)
@@ -527,7 +577,16 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			// TODO: Check existence of server
+			if !serverExists(name) {
+				log.Printf("Server %v does not exist", err)
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Server %v does not exist", name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
 			success, err := permsChecker.RemoveUserFromServer(targetUser.ID, name)
 			if err != nil {
 				log.Printf("RemoveUserFromServer: %v", err)
