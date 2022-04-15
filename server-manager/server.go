@@ -255,7 +255,9 @@ func toBase62(id uint64) string {
 }
 
 func (s *server) AddUserIP(ctx context.Context, user string, ip string) error {
-	flake := sonyflake.NewSonyflake(sonyflake.Settings{})
+	flake := sonyflake.NewSonyflake(sonyflake.Settings{
+		MachineID: func() (uint16, error) { return 0x6969, nil },
+	})
 	flakeID, err := flake.NextID()
 	if err != nil {
 		return fmt.Errorf("flake.NextID: %v", err)
