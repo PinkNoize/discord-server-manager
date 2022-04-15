@@ -444,7 +444,7 @@ func commandStatus(ctx context.Context, args *statusArgs) ([]*discordgo.MessageE
 		return nil, fmt.Errorf("no servers specified")
 	}
 	sort.Strings(serversList)
-	var servers map[string]*server
+	servers := make(map[string]*server)
 	for i := range serversList {
 		s, err := ServerFromName(ctx, serversList[i])
 		if err != nil {
