@@ -466,10 +466,10 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
-						Content: fmt.Sprintf("You do not have access to any servers."),
 						Embeds: []*discordgo.MessageEmbed{
 							{
-								Type: discordgo.EmbedTypeImage,
+								Type:        discordgo.EmbedTypeImage,
+								Description: "You do not have access to any servers.",
 								Image: &discordgo.MessageEmbedImage{
 									URL: "https://cdn.discordapp.com/attachments/561082316689244162/964590315501666374/unknown.png",
 								},
@@ -497,8 +497,16 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
-						Content: fmt.Sprintf("You do not have access to %v or it does not exist\nhttps://cdn.discordapp.com/attachments/561082316689244162/964590315501666374/unknown.png", nameIface.StringValue()),
-						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+						Embeds: []*discordgo.MessageEmbed{
+							{
+								Type:        discordgo.EmbedTypeImage,
+								Description: fmt.Sprintf("You do not have access to `%v` or it does not exist", nameIface.StringValue()),
+								Image: &discordgo.MessageEmbedImage{
+									URL: "https://cdn.discordapp.com/attachments/561082316689244162/964590315501666374/unknown.png",
+								},
+							},
+						},
+						Flags: uint64(discordgo.MessageFlagsEphemeral),
 					},
 				}, nil
 			} else {

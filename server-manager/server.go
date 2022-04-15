@@ -154,6 +154,9 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 				},
 			},
 		},
+		Labels: map[string]string{
+			"server": generateServerTag(name),
+		},
 		Tags: &compute.Tags{
 			Items: []string{generateServerTag(name)},
 		},
