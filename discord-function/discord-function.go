@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"sync"
@@ -39,6 +40,9 @@ var discordAppID string = os.Getenv("DISCORD_APPID")
 var discordSecretID string = os.Getenv("DISCORD_SECRET_ID")
 var keySecretID string = os.Getenv("KEY_SECRET_ID")
 var ipFetchURL string = os.Getenv("IP_FETCH_URL")
+var logWebhookURL string = os.Getenv("LOG_WEBHOOK_URL")
+var logWebhookID string
+var logWebhookToken string
 
 var firestoreClient *firestore.Client
 var permsChecker *PermissionManager
@@ -50,6 +54,7 @@ type ForwardPubSub struct {
 }
 
 var isValidName = regexp.MustCompile(`^[a-zA-Z0-9\-]+$`).MatchString
+var discordSession *discordgo.Session
 
 func init() {
 	var err error
@@ -66,6 +71,21 @@ func init() {
 	discordPubkey, err = hex.DecodeString(os.Getenv("DISCORD_PUBKEY"))
 	if err != nil {
 		log.Fatalf("Failed to decode public key: %v", err)
+	}
+	discordSession, err = discordgo.New("")
+	if err != nil {
+		log.Fatalf("Error: initDiscord: %v", err)
+	}
+	if len(logWebhookURL) > 0 {
+		u, err := url.Parse(logWebhookURL)
+		if err != nil {
+			log.Printf("Failed to parse logWebhookURL: %v", err)
+		} else {
+			dir, file := path.Split(u.Path)
+			logWebhookToken = file
+			dir, file = path.Split(path.Clean(dir))
+			logWebhookID = file
+		}
 	}
 }
 
@@ -98,6 +118,48 @@ func verifyOpts(opts map[string]*discordgo.ApplicationCommandInteractionDataOpti
 		}
 	}
 	return true, ""
+}
+
+func logCommandToWebhook(username, command, subcmd string, args map[string]*discordgo.ApplicationCommandInteractionDataOption) error {
+	if len(logWebhookURL) < 1 {
+		return nil
+	}
+	log.Print("Sending command to webhook")
+	var fields []*discordgo.MessageEmbedField
+	fields = append(fields, &discordgo.MessageEmbedField{
+		Name:   "Command",
+		Value:  command,
+		Inline: true,
+	})
+	fields = append(fields, &discordgo.MessageEmbedField{
+		Name:   "Subcommand",
+		Value:  subcmd,
+		Inline: true,
+	})
+	for arg, option := range args {
+		v := "nil"
+		if option != nil {
+			v = fmt.Sprintf("%s", option.Value)
+		}
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:  arg,
+			Value: v,
+		})
+	}
+	data := &discordgo.WebhookParams{
+		Embeds: []*discordgo.MessageEmbed{
+			{
+				Title:  username,
+				Type:   discordgo.EmbedTypeRich,
+				Fields: fields,
+			},
+		},
+	}
+	_, err := discordSession.WebhookExecute(logWebhookID, logWebhookToken, false, data)
+	if err != nil {
+		return fmt.Errorf("WebhookExecute %v", err)
+	}
+	return nil
 }
 
 // Cloud Function Entry
@@ -165,7 +227,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	if userID != "" {
 		switch command {
 		case "server":
-			response, err = handleServerGroupCommand(ctx, userID, commandData, rawInteraction)
+			response, err = handleServerGroupCommand(ctx, username, userID, commandData, rawInteraction)
 			if err != nil {
 				log.Printf("Error: handleApplicationCommand: handleServerGroupCommand: %v", err)
 				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
@@ -209,13 +271,14 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	}
 }
 
-func handleServerGroupCommand(ctx context.Context, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+func handleServerGroupCommand(ctx context.Context, username, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
 	log.Printf("Subcommand: %v", subcmd.Name)
+	args := optionsToMap(subcmd.Options)
+	logCommandToWebhook(fmt.Sprintf("%v (%v)", username, userID), "server", subcmd.Name, args)
 	switch subcmd.Name {
 	case "create":
-		args := optionsToMap(subcmd.Options)
 		if pass, missing := verifyOpts(args, []string{"name", "subdomain", "machinetype", "ports"}); !pass {
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -312,7 +375,6 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			}, nil
 		}
 	case "start", "stop", "delete":
-		args := optionsToMap(subcmd.Options)
 		if pass, missing := verifyOpts(args, []string{"name"}); !pass {
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -391,7 +453,6 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			}, nil
 		}
 	case "connect":
-		args := optionsToMap(subcmd.Options)
 		if pass, missing := verifyOpts(args, []string{"name"}); !pass {
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -455,7 +516,6 @@ func handleServerGroupCommand(ctx context.Context, userID string, data discordgo
 			}, nil
 		}
 	case "status":
-		args := optionsToMap(subcmd.Options)
 		nameIface, ok := args["name"]
 		var servers []string
 		if !ok {
@@ -557,9 +617,9 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 	opts := data.Options
 	subcmd := opts[0]
 	log.Printf("Subcommand: %v", subcmd.Name)
+	args := optionsToMap(subcmd.Options)
 	switch subcmd.Name {
 	case "add":
-		args := optionsToMap(subcmd.Options)
 		if pass, missing := verifyOpts(args, []string{"user", "name"}); !pass {
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -637,7 +697,6 @@ func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.A
 			}, nil
 		}
 	case "remove":
-		args := optionsToMap(subcmd.Options)
 		if pass, missing := verifyOpts(args, []string{"user", "name"}); !pass {
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,

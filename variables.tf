@@ -14,3 +14,6 @@ variable "repository" {}
 variable "admin_discord_id" {
   default = ""
 }
+variable "webhook_log" {
+  default = ""
+}

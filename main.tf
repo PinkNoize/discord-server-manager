@@ -207,6 +207,7 @@ module "discord_function" {
     "DISCORD_PUBKEY"   = var.discord_pubkey
     "IP_FETCH_URL"     = module.ip_fetch_function.function.https_trigger_url
     "KEY_SECRET_ID"    = google_secret_manager_secret.ip-fetch-key.id
+    "LOG_WEBHOOK_URL"  = var.webhook_log
   }
   repository            = var.repository
   branch                = "main"

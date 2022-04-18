@@ -176,7 +176,7 @@ var (
 	}
 )
 
-var discordSession *discordgo.Session
+var discordDeploySession *discordgo.Session
 
 var initDiscordCommandDeployOnce sync.Once
 
@@ -196,7 +196,7 @@ func initDiscordCommandDeploy() {
 		log.Fatalf("Error: initDiscord: AccessSecretVersion: %v", err)
 	}
 	discordAPIToken := string(result.Payload.Data)
-	discordSession, err = discordgo.New(fmt.Sprintf("Bot %v", discordAPIToken))
+	discordDeploySession, err = discordgo.New(fmt.Sprintf("Bot %v", discordAPIToken))
 	if err != nil {
 		log.Fatalf("Invalid bot parameters: %v", err)
 	}
@@ -205,7 +205,7 @@ func initDiscordCommandDeploy() {
 func DiscordCommandDeploy(w http.ResponseWriter, r *http.Request) {
 	initDiscordCommandDeployOnce.Do(initDiscordCommandDeploy)
 	for i := range commands {
-		_, err := discordSession.ApplicationCommandCreate(discordAppID, "", commands[i])
+		_, err := discordDeploySession.ApplicationCommandCreate(discordAppID, "", commands[i])
 		if err != nil {
 			log.Fatalf("ApplicationCommandCreate: %v", err)
 		}
