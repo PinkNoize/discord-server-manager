@@ -234,7 +234,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 				return
 			}
 		case "user":
-			response, err = handleUserGroupCommand(ctx, userID, commandData, rawInteraction)
+			response, err = handleUserGroupCommand(ctx, username, userID, commandData, rawInteraction)
 			if err != nil {
 				log.Printf("Error: handleApplicationCommand: handleServerGroupCommand: %v", err)
 				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
@@ -613,11 +613,12 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 	}
 }
 
-func handleUserGroupCommand(ctx context.Context, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+func handleUserGroupCommand(ctx context.Context, username, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
 	log.Printf("Subcommand: %v", subcmd.Name)
 	args := optionsToMap(subcmd.Options)
+	logCommandToWebhook(fmt.Sprintf("%v (%v)", username, userID), "user", subcmd.Name, args)
 	switch subcmd.Name {
 	case "add":
 		if pass, missing := verifyOpts(args, []string{"user", "name"}); !pass {
