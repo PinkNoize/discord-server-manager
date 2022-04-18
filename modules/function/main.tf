@@ -44,6 +44,11 @@ resource "google_cloudfunctions_function" "function" {
       resource   = var.event_resource
     }
   }
+  lifecycle {
+    ignore_changes = [
+      labels,    
+    ]  
+  }
 }
 
 # Cloudbuild trigger for function
