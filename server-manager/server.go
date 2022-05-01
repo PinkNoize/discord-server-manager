@@ -293,7 +293,7 @@ func (s *server) Delete(ctx context.Context) error {
 	}
 
 	// Delete compute instance
-	_, err := computeClient.Instances.Delete(
+	_, err = computeClient.Instances.Delete(
 		projectID,
 		projectZone,
 		s.Name,
