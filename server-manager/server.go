@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/sony/sonyflake"
+	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
@@ -87,6 +88,10 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	if err != nil {
 		return nil, fmt.Errorf("iam.NewService: %v", err)
 	}
+	cloudresourcemanagerService, err := cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("cloudresourcemanager.NewService: %v", err)
+	}
 
 	// Create database item
 	serverDoc := firestoreClient.Collection("Servers").Doc(name)
@@ -127,22 +132,22 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	}
 
 	// Set IAM Policy
-	policy, err := iamService.Projects.ServiceAccounts.GetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email)).Do()
+	policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email), &cloudresourcemanager.GetIamPolicyRequest{}).Do()
 	if err != nil {
 		defer serverDocUndo()
 		defer sAccountUndo()
 		return nil, fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
 	}
-	policy.Bindings = []*iam.Binding{
+	policy.Bindings = []*cloudresourcemanager.Binding{
 		{
 			Members: []string{fmt.Sprintf("serviceAccount:%s", sAccount.Email)},
 			Role:    "roles/stackdriver.resourceMetadata.writer",
 		},
 	}
-	setIamPolicyRequest := &iam.SetIamPolicyRequest{
+	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
 	}
-	policy, err = iamService.Projects.ServiceAccounts.SetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email), setIamPolicyRequest).Do()
+	policy, err = cloudresourcemanagerService.Projects.SetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email), setIamPolicyRequest).Do()
 	if err != nil {
 		defer serverDocUndo()
 		defer sAccountUndo()
