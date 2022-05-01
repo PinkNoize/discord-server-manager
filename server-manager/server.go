@@ -108,7 +108,7 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 
 	// Create service account
 	createRequest := &iam.CreateServiceAccountRequest{
-		AccountId: fmt.Sprintf("projects/%s/serviceAccounts/%s-server-compute", projectID, name),
+		AccountId: fmt.Sprintf("%s-server-compute", name),
 		ServiceAccount: &iam.ServiceAccount{
 			DisplayName: fmt.Sprintf("%v Compute Service Account", name),
 		},
