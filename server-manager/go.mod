@@ -10,4 +10,9 @@ require (
 	github.com/sony/sonyflake v1.0.0 // indirect
 	google.golang.org/api v0.70.0
 	google.golang.org/grpc v1.44.0
+	github.com/PinkNoize/discord-server-manager/server-manager-utils v0.0.0
+)
+
+replace (
+   github.com/PinkNoize/discord-server-manager/server-manager-utils => ../server-manager-utils
 )
