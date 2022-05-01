@@ -37,7 +37,16 @@ resource "google_project_service" "comp" {
   service = "compute.googleapis.com"
 
   disable_dependent_services = true
-  disable_on_destroy         = false
+  disable_on_destroy         = true
+}
+
+#Enable IAM API
+resource "google_project_service" "comp" {
+  project = var.project
+  service = "iam.googleapis.com"
+
+  disable_dependent_services = true
+  disable_on_destroy         = true
 }
 
 # Give cloudbuild access to cloud functions
