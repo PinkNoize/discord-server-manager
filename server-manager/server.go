@@ -132,22 +132,19 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	}
 
 	// Set IAM Policy
-	policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email), &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
 	if err != nil {
 		defer serverDocUndo()
 		defer sAccountUndo()
 		return nil, fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
 	}
-	policy.Bindings = []*cloudresourcemanager.Binding{
-		{
-			Members: []string{fmt.Sprintf("serviceAccount:%s", sAccount.Email)},
-			Role:    "roles/stackdriver.resourceMetadata.writer",
-		},
-	}
+
+	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/stackdriver.resourceMetadata.writer", policy)
+
 	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
 	}
-	policy, err = cloudresourcemanagerService.Projects.SetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email), setIamPolicyRequest).Do()
+	policy, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
 	if err != nil {
 		defer serverDocUndo()
 		defer sAccountUndo()
@@ -501,4 +498,29 @@ func (s *server) IsRunning(ctx context.Context) (bool, error) {
 	return status == PROVISIONING ||
 		status == RUNNING ||
 		status == STAGING, nil
+}
+
+// https://github.com/GoogleCloudPlatform/golang-samples/blob/cc8d05b8732769e07f5da46094a848bde655240d/iam/quickstart/quickstart.go#L69
+func addBinding(crmService *cloudresourcemanager.Service, projectID, member, role string, policy *cloudresourcemanager.Policy) {
+
+	// Find the policy binding for role. Only one binding can have the role.
+	var binding *cloudresourcemanager.Binding
+	for _, b := range policy.Bindings {
+		if b.Role == role {
+			binding = b
+			break
+		}
+	}
+
+	if binding != nil {
+		// If the binding exists, adds the member to the binding
+		binding.Members = append(binding.Members, member)
+	} else {
+		// If the binding does not exist, adds a new binding to the policy
+		binding = &cloudresourcemanager.Binding{
+			Role:    role,
+			Members: []string{member},
+		}
+		policy.Bindings = append(policy.Bindings, binding)
+	}
 }
