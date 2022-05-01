@@ -111,7 +111,7 @@ resource "google_project_iam_member" "custom-role-iam" {
 
   condition {
     title      = "limit_to_server_accs"
-    expression = "resource.type == 'service_account' && resource.name.endsWith('-server-compute')"
+    expression = "resource.name.endsWith('-server-compute')"
   }
 }
 
