@@ -27,6 +27,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/uuid"
 	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const CONNECT_TOKEN_LIFE = 15
@@ -391,7 +393,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			if !serverExists(name) {
+			if !serverExists(ctx, name) {
 				log.Printf("Server %v does not exist", err)
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -470,7 +472,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			if !serverExists(name) {
+			if !serverExists(ctx, name) {
 				log.Printf("Server %v does not exist", err)
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -648,7 +650,7 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			if !serverExists(name) {
+			if !serverExists(ctx, name) {
 				log.Printf("Server %v does not exist", err)
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -725,7 +727,7 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			if !serverExists(name) {
+			if !serverExists(ctx, name) {
 				log.Printf("Server %v does not exist", err)
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -796,9 +798,15 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 	}
 }
 
-func serverExists(name string) bool {
-	// TODO: finish me
-	return true
+func serverExists(ctx context.Context, name string) bool {
+	serverDoc, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
+	if err != nil {
+		if status.Code(err) != codes.NotFound {
+			log.Printf("error: serverExists: Get: %v", err)
+		}
+		return false
+	}
+	return serverDoc.Exists()
 }
 
 type Token struct {
