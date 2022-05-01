@@ -123,6 +123,8 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 		defer serverDocUndo()
 		return nil, fmt.Errorf("Projects.ServiceAccounts.Create: %v", err)
 	}
+	log.Printf("Created service account %v", sAccount.Email)
+
 	sAccountUndo := func() {
 		log.Printf("Undo service account creation of %v", name)
 		_, err = iamService.Projects.ServiceAccounts.Delete(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email)).Do()
@@ -139,7 +141,8 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 		return nil, fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
 	}
 
-	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/stackdriver.resourceMetadata.writer", policy)
+	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/monitoring.metricWriter", policy)
+	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/logging.logWriter", policy)
 
 	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
