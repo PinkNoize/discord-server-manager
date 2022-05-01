@@ -49,6 +49,15 @@ resource "google_project_service" "iam-proj" {
   disable_on_destroy         = true
 }
 
+#Enable Cloud Resource Manager API
+resource "google_project_service" "iam-proj" {
+  project = var.project
+  service = "cloudresourcemanager.googleapis.com"
+
+  disable_dependent_services = true
+  disable_on_destroy         = true
+}
+
 # Give cloudbuild access to cloud functions
 resource "google_project_service_identity" "cb_sa" {
   provider = google-beta
