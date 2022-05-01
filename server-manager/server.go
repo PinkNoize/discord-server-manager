@@ -12,6 +12,7 @@ import (
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
 	"google.golang.org/api/googleapi"
+	iam "google.golang.org/api/iam/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -82,6 +83,11 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 		Ports:       ports,
 	}
 
+	iamService, err := iam.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("iam.NewService: %v", err)
+	}
+
 	// Create database item
 	serverDoc := firestoreClient.Collection("Servers").Doc(name)
 	_, err = serverDoc.Create(
@@ -100,6 +106,49 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	}
 	log.Printf("Inserted Doc %v into Collection Servers", name)
 
+	// Create service account
+	createRequest := &iam.CreateServiceAccountRequest{
+		AccountId: fmt.Sprintf("projects/%s/serviceAccounts/%s-server-compute", projectID, name),
+		ServiceAccount: &iam.ServiceAccount{
+			DisplayName: fmt.Sprintf("%v Compute Service Account", name),
+		},
+	}
+	sAccount, err := iamService.Projects.ServiceAccounts.Create("projects/"+projectID, createRequest).Do()
+	if err != nil {
+		defer serverDocUndo()
+		return nil, fmt.Errorf("Projects.ServiceAccounts.Create: %v", err)
+	}
+	sAccountUndo := func() {
+		log.Printf("Undo service account creation of %v", name)
+		_, err = iamService.Projects.ServiceAccounts.Delete(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email)).Do()
+		if err != nil {
+			log.Printf("ERROR: Failed to delete service account: Projects.ServiceAccounts.Delete: %v", err)
+		}
+	}
+
+	// Set IAM Policy
+	policy, err := iamService.Projects.ServiceAccounts.GetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email)).Do()
+	if err != nil {
+		defer serverDocUndo()
+		defer sAccountUndo()
+		return nil, fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
+	}
+	policy.Bindings = []*iam.Binding{
+		{
+			Members: []string{fmt.Sprintf("serviceAccount:%s", sAccount.Email)},
+			Role:    "roles/stackdriver.resourceMetadata.writer",
+		},
+	}
+	setIamPolicyRequest := &iam.SetIamPolicyRequest{
+		Policy: policy,
+	}
+	policy, err = iamService.Projects.ServiceAccounts.SetIamPolicy(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email), setIamPolicyRequest).Do()
+	if err != nil {
+		defer serverDocUndo()
+		defer sAccountUndo()
+		return nil, fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
+	}
+
 	// Get compute instance image
 	imageResponse, err := computeClient.Images.GetFromFamily(
 		"debian-cloud",
@@ -107,6 +156,7 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	).Context(ctx).Do()
 	if err != nil {
 		defer serverDocUndo()
+		defer sAccountUndo()
 		return nil, err
 	}
 	sourceImage := imageResponse.SelfLink
@@ -154,6 +204,12 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 				},
 			},
 		},
+		ServiceAccounts: []*compute.ServiceAccount{
+			{
+				Email:  sAccount.Email,
+				Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
+			},
+		},
 		Labels: map[string]string{
 			"server": generateServerTag(name),
 		},
@@ -169,6 +225,7 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 	).Context(ctx).Do()
 	if err != nil {
 		defer serverDocUndo()
+		defer sAccountUndo()
 		return nil, err
 	}
 	log.Printf("Created instance %v", name)
@@ -220,6 +277,21 @@ func (s *server) Stop(ctx context.Context) error {
 }
 
 func (s *server) Delete(ctx context.Context) error {
+	iamService, err := iam.NewService(ctx)
+	if err != nil {
+		return fmt.Errorf("iam.NewService: %v", err)
+	}
+
+	// Get instance info
+	instance, err := computeClient.Instances.Get(
+		projectID,
+		projectZone,
+		s.Name,
+	).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("error: Instances.get: %v", err)
+	}
+
 	// Delete compute instance
 	_, err := computeClient.Instances.Delete(
 		projectID,
@@ -230,6 +302,14 @@ func (s *server) Delete(ctx context.Context) error {
 		return err
 	}
 	log.Printf("Instance %v deleted", s.Name)
+
+	// Delete service account
+	for _, sAcc := range instance.ServiceAccounts {
+		_, err = iamService.Projects.ServiceAccounts.Delete(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAcc.Email)).Do()
+		if err != nil {
+			log.Printf("error: Unable to delete %v. Manually delete the account", sAcc.Email)
+		}
+	}
 
 	// Delete database entry
 	_, err = firestoreClient.Collection("Servers").Doc(s.Name).Delete(ctx)

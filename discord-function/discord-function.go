@@ -53,7 +53,7 @@ type ForwardPubSub struct {
 	Interaction *[]byte `json:"interaction,omitempty"`
 }
 
-var isValidName = regexp.MustCompile(`^[a-zA-Z0-9\-]+$`).MatchString
+var isValidName = regexp.MustCompile(`^[a-zA-Z0-9\-]{2,14}$`).MatchString
 var discordSession *discordgo.Session
 
 func init() {

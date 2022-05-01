@@ -79,11 +79,13 @@ resource "random_id" "id" {
 	  byte_length = 8
 }
 
-resource "google_project_iam_custom_role" "command_func_role" {
-  role_id     = "cmdfunc_role_${random_id.id.hex}"
+resource "google_project_iam_custom_role" "command_func_svc_create_role" {
+  role_id     = "cmdfunc_svc_create_${random_id.id.hex}"
   title       = "Command Func Role"
   description = ""
-  permissions = ["datastore.databases.get"]
+  permissions = ["iam.serviceAccounts.get",
+                 "iam.serviceAccounts.create",
+                 "iam.serviceAccounts.delete"]
 }
 
 resource "google_service_account" "service_account" {
@@ -93,8 +95,24 @@ resource "google_service_account" "service_account" {
 
 resource "google_project_iam_member" "custom-role-iam" {
   project = var.project
-  role    = google_project_iam_custom_role.command_func_role.id
+  role    = google_project_iam_custom_role.command_func_svc_create_role.id
   member = "serviceAccount:${google_service_account.service_account.email}"
+
+  condition {
+    title      = "limit_to_server_accs"
+    expression = "resource.name.extract('/serviceAccounts/{acc_name}').endsWith('-server-compute')"
+  }
+}
+
+resource "google_project_iam_member" "cmd-policy-role-iam" {
+  project = var.project
+  role    = "roles/resourcemanager.projectIamAdmin"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
+
+  condition {
+    title      = "limit_to_server_accs"
+    expression = "resource.name.extract('/serviceAccounts/{acc_name}').endsWith('-server-compute')"
+  }
 }
 
 resource "google_project_iam_member" "firestore-iam" {
