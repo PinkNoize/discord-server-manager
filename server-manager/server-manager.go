@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
-	smu "github.com/PinkNoize/discord-server-manager/server-manager-utils"
 	"github.com/bwmarrin/discordgo"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
@@ -88,10 +87,10 @@ type PubSubMessage struct {
 	Attributes json.RawMessage `json:"attributes"`
 }
 
-/*type ForwardPubSub struct {
+type ForwardPubSub struct {
 	Command     string  `json:"command"`
 	Interaction *[]byte `json:"interaction,omitempty"`
-}*/
+}
 
 type createServerArgs struct {
 	Name        *string `json:"name"`
@@ -135,7 +134,7 @@ func SendDiscordInteractionResponse(token string, response *discordgo.WebhookPar
 
 // Handles server commands.
 func CommandPubSub(ctx context.Context, m PubSubMessage) error {
-	var forwardedData smu.ForwardPubSub
+	var forwardedData ForwardPubSub
 	if err := json.Unmarshal([]byte(m.Data), &forwardedData); err != nil {
 		log.Fatalf("Failed to unmarshal forwardedData: %v", err)
 	}
