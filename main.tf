@@ -93,7 +93,6 @@ resource "google_project_iam_custom_role" "command_func_svc_create_role" {
   title       = "Command Func Role"
   description = ""
   permissions = ["resourcemanager.projects.get",
-                 "resourcemanager.projects.list",
                  "iam.serviceAccounts.get",
                  "iam.serviceAccounts.create",
                  "iam.serviceAccounts.delete"]
