@@ -92,7 +92,9 @@ resource "google_project_iam_custom_role" "command_func_svc_create_role" {
   role_id     = "cmdfunc_svc_create_${random_id.id.hex}"
   title       = "Command Func Role"
   description = ""
-  permissions = ["iam.serviceAccounts.get",
+  permissions = ["resourcemanager.projects.get",
+                 "resourcemanager.projects.list",
+                 "iam.serviceAccounts.get",
                  "iam.serviceAccounts.create",
                  "iam.serviceAccounts.delete"]
 }
@@ -109,7 +111,7 @@ resource "google_project_iam_member" "custom-role-iam" {
 
   condition {
     title      = "limit_to_server_accs"
-    expression = "resource.name.extract('/serviceAccounts/{acc_name}').endsWith('-server-compute')"
+    expression = "resource.type == 'service_account' && resource.name.endsWith('-server-compute')"
   }
 }
 
@@ -120,7 +122,7 @@ resource "google_project_iam_member" "cmd-policy-role-iam" {
 
   condition {
     title      = "limit_to_server_accs"
-    expression = "resource.name.extract('/serviceAccounts/{acc_name}').endsWith('-server-compute')"
+    expression = "resource.name.endsWith('-server-compute')"
   }
 }
 
