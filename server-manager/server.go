@@ -313,7 +313,10 @@ func (s *server) Delete(ctx context.Context) error {
 		_, err = iamService.Projects.ServiceAccounts.Delete(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAcc.Email)).Do()
 		if err != nil {
 			log.Printf("error: Unable to delete %v. Manually delete the account", sAcc.Email)
+		} else {
+			log.Printf("Deleted service account %v", sAcc.Email)
 		}
+
 	}
 
 	// Delete database entry
