@@ -41,7 +41,7 @@ resource "google_project_service" "comp" {
 }
 
 #Enable IAM API
-resource "google_project_service" "comp" {
+resource "google_project_service" "iam-proj" {
   project = var.project
   service = "iam.googleapis.com"
 
