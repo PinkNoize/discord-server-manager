@@ -50,7 +50,7 @@ resource "google_project_service" "iam-proj" {
 }
 
 #Enable Cloud Resource Manager API
-resource "google_project_service" "iam-proj" {
+resource "google_project_service" "crm-proj" {
   project = var.project
   service = "cloudresourcemanager.googleapis.com"
 
