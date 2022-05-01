@@ -131,6 +131,12 @@ resource "google_project_iam_member" "compute-iam" {
   member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+resource "google_project_iam_member" "sa-compute-iam" {
+  project = var.project
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "command-member" {
   project = var.project
   secret_id = google_secret_manager_secret.secret-basic.id
