@@ -58,30 +58,62 @@ type ForwardPubSub struct {
 var isValidName = regexp.MustCompile(`^[a-zA-Z0-9\-]{2,14}$`).MatchString
 var discordSession *discordgo.Session
 
+type LogEntry struct {
+	Message  string `json:"message"`
+	Severity string `json:"severity,omitempty"`
+}
+
+// String renders an entry structure to the JSON format expected by Cloud Logging.
+func (e LogEntry) String() string {
+	if e.Severity == "" {
+		e.Severity = "INFO"
+	}
+	out, err := json.Marshal(e)
+	if err != nil {
+		log.Printf("json.Marshal: %v", err)
+	}
+	return string(out)
+}
+
 func init() {
 	var err error
 	ctx := context.Background()
 	firestoreClient, err = firestore.NewClient(ctx, projectID)
 	if err != nil {
-		log.Fatalf("Failed to create firestore client: %v", err)
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("Failed to create firestore client: %v", err),
+			Severity: "CRITICAL",
+		})
 	}
 	pubsubClient, err := pubsub.NewClient(ctx, projectID)
 	if err != nil {
-		log.Fatalf("Failed to create pubsub client: %v", err)
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("Failed to create pubsub client: %v", err),
+			Severity: "CRITICAL",
+		})
 	}
 	commandTopic = pubsubClient.Topic(commandTopicID)
 	discordPubkey, err = hex.DecodeString(os.Getenv("DISCORD_PUBKEY"))
 	if err != nil {
-		log.Fatalf("Failed to decode public key: %v", err)
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("Failed to decode public key: %v", err),
+			Severity: "CRITICAL",
+		})
 	}
 	discordSession, err = discordgo.New("")
 	if err != nil {
-		log.Fatalf("Error: initDiscord: %v", err)
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("Error: initDiscord: %v", err),
+			Severity: "CRITICAL",
+		})
 	}
 	if len(logWebhookURL) > 0 {
 		u, err := url.Parse(logWebhookURL)
 		if err != nil {
-			log.Printf("Failed to parse logWebhookURL: %v", err)
+			log.Print(LogEntry{
+				Message:  fmt.Sprintf("Failed to parse logWebhookURL: %v", err),
+				Severity: "ERROR",
+			})
 		} else {
 			dir, file := path.Split(u.Path)
 			logWebhookToken = file
@@ -97,7 +129,10 @@ func initalizeEnforcer() {
 	var err error
 	permsChecker, err = NewPermissionManager(os.Getenv("ADMIN_DISCORD_ID"), firestoreClient)
 	if err != nil {
-		log.Fatalf("NewPermissionManager(): %v", err)
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("NewPermissionManager(): %v", err),
+			Severity: "CRITICAL",
+		})
 	}
 }
 
@@ -126,7 +161,10 @@ func logCommandToWebhook(username, command, subcmd string, args map[string]*disc
 	if len(logWebhookURL) < 1 {
 		return nil
 	}
-	log.Print("Sending command to webhook")
+	log.Print(LogEntry{
+		Message:  "Sending command to webhook",
+		Severity: "INFO",
+	})
 	var fields []*discordgo.MessageEmbedField
 	fields = append(fields, &discordgo.MessageEmbedField{
 		Name:   "Command",
@@ -168,7 +206,10 @@ func logCommandToWebhook(username, command, subcmd string, args map[string]*disc
 func DiscordFunctionEntry(w http.ResponseWriter, r *http.Request) {
 	verified := discordgo.VerifyInteraction(r, ed25519.PublicKey(discordPubkey))
 	if !verified {
-		log.Printf("Failed signature verification: %v", r.RemoteAddr)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Failed signature verification: %v", r.RemoteAddr),
+			Severity: "NOTICE",
+		})
 		http.Error(w, "signature mismatch", http.StatusUnauthorized)
 		return
 	}
@@ -177,13 +218,19 @@ func DiscordFunctionEntry(w http.ResponseWriter, r *http.Request) {
 	var interaction discordgo.Interaction
 	rawInteraction, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error: handleApplicationCommand: ReadAll: %v", err)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Error: handleApplicationCommand: ReadAll: %v", err),
+			Severity: "ERROR",
+		})
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 	err = interaction.UnmarshalJSON(rawInteraction)
 	if err != nil {
-		log.Printf("Error: handleApplicationCommand: jsonDecoder: %v", err)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Error: handleApplicationCommand: jsonDecoder: %v", err),
+			Severity: "ERROR",
+		})
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -196,16 +243,25 @@ func DiscordFunctionEntry(w http.ResponseWriter, r *http.Request) {
 		initEnforcer.Do(initalizeEnforcer)
 		handleApplicationCommand(r.Context(), interaction, w, rawInteraction)
 	default:
-		log.Printf("Error: Unknown Interaction Type: %v", interaction.Type)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Unknown Interaction Type: %v", interaction.Type),
+			Severity: "ERROR",
+		})
 		http.Error(w, "Unknown Interaction Type", http.StatusNotImplemented)
 	}
-	log.Println("Complete") // maybe flushes logger
+	log.Print(LogEntry{
+		Message:  "Complete",
+		Severity: "INFO",
+	}) // maybe flushes logger
 }
 
 func handlePing(w http.ResponseWriter) {
 	_, err := w.Write([]byte(`{"type":1}`))
 	if err != nil {
-		log.Printf("Error: Ping: %v", err)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Ping: %v", err),
+			Severity: "ERROR",
+		})
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -225,20 +281,29 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	}
 	commandData := interaction.ApplicationCommandData()
 	command := commandData.Name
-	log.Printf("User %v (%v) ran %v", username, userID, command)
+	log.Print(LogEntry{
+		Message:  fmt.Sprintf("User %v (%v) ran %v", username, userID, command),
+		Severity: "INFO",
+	})
 	if userID != "" {
 		switch command {
 		case "server":
 			response, err = handleServerGroupCommand(ctx, username, userID, commandData, rawInteraction)
 			if err != nil {
-				log.Printf("Error: handleApplicationCommand: handleServerGroupCommand: %v", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("handleApplicationCommand: handleServerGroupCommand: %v", err),
+					Severity: "ERROR",
+				})
 				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 				return
 			}
 		case "user":
 			response, err = handleUserGroupCommand(ctx, username, userID, commandData, rawInteraction)
 			if err != nil {
-				log.Printf("Error: handleApplicationCommand: handleServerGroupCommand: %v", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Error: handleApplicationCommand: handleUserGroupCommand: %v", err),
+					Severity: "ERROR",
+				})
 				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 				return
 			}
@@ -267,7 +332,10 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(*response)
 	if err != nil {
-		log.Printf("Error: handleApplicationCommand: jsonEncoder: %v", err)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Error: handleApplicationCommand: jsonEncoder: %v", err),
+			Severity: "ERROR",
+		})
 		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -276,7 +344,10 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 func handleServerGroupCommand(ctx context.Context, username, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
-	log.Printf("Subcommand: %v", subcmd.Name)
+	log.Print(LogEntry{
+		Message:  fmt.Sprintf("Subcommand: %v", subcmd.Name),
+		Severity: "INFO",
+	})
 	args := optionsToMap(subcmd.Options)
 	logCommandToWebhook(fmt.Sprintf("%v (%v)", username, userID), "server", subcmd.Name, args)
 	switch subcmd.Name {
@@ -294,20 +365,25 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 		subdomain := args["subdomain"].StringValue()
 		machineType := args["machinetype"].StringValue()
 		ports := args["ports"].StringValue()
-		log.Printf(
-			"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v",
-			name,
-			subdomain,
-			machineType,
-			ports,
-		)
+		log.Print(LogEntry{
+			Message: fmt.Sprintf(
+				"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v",
+				name,
+				subdomain,
+				machineType,
+				ports),
+			Severity: "INFO",
+		})
 		allowed, err := permsChecker.CheckServerOp(userID, name, "create")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
 			if !isValidName(name) {
-				log.Printf("Invalid server name: %v", name)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Invalid server name: %v", name),
+					Severity: "INFO",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -317,7 +393,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 				}, nil
 			}
 			if !isValidName(subdomain) {
-				log.Printf("Invalid subdomain: %v", subdomain)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Invalid subdomain: %v", subdomain),
+					Severity: "INFO",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -346,10 +425,16 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			if err != nil {
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
-			log.Print("Deferred response")
+			log.Print(LogEntry{
+				Message:  "Deferred response",
+				Severity: "INFO",
+			})
 			_, err = permsChecker.CreateServerPermissions(name)
 			if err != nil {
-				log.Printf("Failed to create server permissions. You may need to delete the server to clean up.")
+				log.Print(LogEntry{
+					Message:  "Failed to create server permissions. You may need to delete the server to clean up.",
+					Severity: "ERROR",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 					Data: &discordgo.InteractionResponseData{
@@ -367,7 +452,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 				},
 			}, nil
 		} else {
-			log.Print("Not authorized")
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -387,14 +475,20 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			}, nil
 		}
 		name := args["name"].StringValue()
-		log.Printf("Server name: %v", name)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Server name: %v", name),
+			Severity: "INFO",
+		})
 		allowed, err := permsChecker.CheckServerOp(userID, name, subcmd.Name)
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
 			if !serverExists(ctx, name) {
-				log.Printf("Server %v does not exist", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Server %v does not exist", err),
+					Severity: "INFO",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -420,12 +514,21 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			if err != nil {
 				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 			}
-			log.Print("Deferred response")
+			log.Print(LogEntry{
+				Message:  "Deferred response",
+				Severity: "INFO",
+			})
 			if subcmd.Name == "delete" {
-				log.Printf("Deleting permissions")
+				log.Print(LogEntry{
+					Message:  "Deleting permissions",
+					Severity: "INFO",
+				})
 				_, err = permsChecker.DeleteServerPermissions(name)
 				if err != nil {
-					log.Printf("Failed to delete server permissions: %v", err)
+					log.Print(LogEntry{
+						Message:  fmt.Sprintf("Failed to delete server permissions: %v", err),
+						Severity: "ERROR",
+					})
 					return &discordgo.InteractionResponse{
 						Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 						Data: &discordgo.InteractionResponseData{
@@ -443,7 +546,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 				},
 			}, nil
 		} else {
-			log.Print("Not authorized")
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -465,7 +571,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			}, nil
 		}
 		name := args["name"].StringValue()
-		log.Printf("Server name: %v", name)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Server name: %v", name),
+			Severity: "INFO",
+		})
 		// Can connect if have start permissions
 		allowed, err := permsChecker.CheckServerOp(userID, name, "start")
 		if err != nil {
@@ -473,7 +582,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 		}
 		if allowed {
 			if !serverExists(ctx, name) {
-				log.Printf("Server %v does not exist", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Server %v does not exist", err),
+					Severity: "INFO",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -484,7 +596,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			}
 			connectUrl, err := generateConnectUrl(ctx, userID, name)
 			if err != nil {
-				log.Printf("ERROR: generateConnectUrl: %v", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("generateConnectUrl: %v", err),
+					Severity: "ERROR",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -506,7 +621,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 				},
 			}, nil
 		} else {
-			log.Print("Not authorized")
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -521,7 +639,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 		nameIface, ok := args["name"]
 		var servers []string
 		if !ok {
-			log.Printf("User requested the status for all servers")
+			log.Print(LogEntry{
+				Message:  "User requested the status for all servers",
+				Severity: "INFO",
+			})
 			// Return results for all valid servers
 			servers = permsChecker.GetServersForUser(userID)
 			if len(servers) < 1 {
@@ -543,10 +664,16 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			}
 		} else {
 			// Check if user has permission to access the server
-			log.Printf("%v requested the status for %v", userID, nameIface.StringValue())
+			log.Print(LogEntry{
+				Message:  fmt.Sprintf("%v requested the status for %v", userID, nameIface.StringValue()),
+				Severity: "INFO",
+			})
 			allowed, err := permsChecker.CheckServerOp(userID, nameIface.StringValue(), "start")
 			if err != nil {
-				log.Printf("ERROR: CheckServerOp: %v", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("CheckServerOp: %v", err),
+					Severity: "ERROR",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -584,7 +711,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			return nil, fmt.Errorf("jsonMarshal: %v", err)
 		}
 		serverCSV := strings.Join(servers, ",")
-		log.Printf("Requesting status for %v", serverCSV)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Requesting status for %v", serverCSV),
+			Severity: "INFO",
+		})
 		result := commandTopic.Publish(ctx, &pubsub.Message{
 			Data: pubSubData,
 			Attributes: map[string]string{
@@ -595,7 +725,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 		if err != nil {
 			return nil, fmt.Errorf("Pubsub.Publish: %v", err)
 		}
-		log.Printf("Deferred response")
+		log.Print(LogEntry{
+			Message:  "Deferred response",
+			Severity: "INFO",
+		})
 		return &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
 			Data: &discordgo.InteractionResponseData{
@@ -604,7 +737,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			},
 		}, nil
 	default:
-		log.Printf("Command `%v` not implemented for server.", subcmd.Name)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Command `%v` not implemented for server.", subcmd.Name),
+			Severity: "WARNING",
+		})
 		return &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -618,7 +754,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 func handleUserGroupCommand(ctx context.Context, username, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
-	log.Printf("Subcommand: %v", subcmd.Name)
+	log.Print(LogEntry{
+		Message:  fmt.Sprintf("Subcommand: %v", subcmd.Name),
+		Severity: "INFO",
+	})
 	args := optionsToMap(subcmd.Options)
 	logCommandToWebhook(fmt.Sprintf("%v (%v)", username, userID), "user", subcmd.Name, args)
 	switch subcmd.Name {
@@ -635,7 +774,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 		targetUser := args["user"].UserValue(nil)
 		name := args["name"].StringValue()
 		if targetUser.ID == "" {
-			log.Printf("Target User ID not specified: %v", *targetUser)
+			log.Print(LogEntry{
+				Message:  fmt.Sprintf("Target User ID not specified: %v", *targetUser),
+				Severity: "INFO",
+			})
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -644,14 +786,20 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 				},
 			}, nil
 		}
-		log.Printf("Add %v to server %v", targetUser, name)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Add %v to server %v", targetUser, name),
+			Severity: "INFO",
+		})
 		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "add")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
 			if !serverExists(ctx, name) {
-				log.Printf("Server %v does not exist", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Server %v does not exist", name),
+					Severity: "INFO",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -662,7 +810,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			}
 			success, err := permsChecker.AddUserToServer(targetUser.ID, name)
 			if err != nil {
-				log.Printf("AddUserToServer: %v", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("AddUserToServer: %v", err),
+					Severity: "ERROR",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -672,7 +823,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 				}, nil
 			}
 			if !success {
-				log.Printf("User %v already has role for server: %v", targetUser.ID, name)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("User %v already has role for server: %v", targetUser.ID, name),
+					Severity: "INFO",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -689,7 +843,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 				},
 			}, nil
 		} else {
-			log.Print("Not authorized")
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -712,7 +869,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 		targetUser := args["user"].UserValue(nil)
 		name := args["name"].StringValue()
 		if targetUser.ID == "" {
-			log.Printf("Target User ID not specified: %v", *targetUser)
+			log.Print(LogEntry{
+				Message:  fmt.Sprintf("Target User ID not specified: %v", *targetUser),
+				Severity: "INFO",
+			})
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -721,14 +881,20 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 				},
 			}, nil
 		}
-		log.Printf("Remove %v from server %v", targetUser, name)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Remove %v from server %v", targetUser, name),
+			Severity: "INFO",
+		})
 		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "add")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
 			if !serverExists(ctx, name) {
-				log.Printf("Server %v does not exist", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Server %v does not exist", name),
+					Severity: "INFO",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -739,7 +905,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			}
 			success, err := permsChecker.RemoveUserFromServer(targetUser.ID, name)
 			if err != nil {
-				log.Printf("RemoveUserFromServer: %v", err)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("RemoveUserFromServer: %v", err),
+					Severity: "ERROR",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -749,7 +918,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 				}, nil
 			}
 			if !success {
-				log.Printf("User %v has no role for server: %v", targetUser.ID, name)
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("User %v has no role for server: %v", targetUser.ID, name),
+					Severity: "WARNING",
+				})
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
@@ -766,7 +938,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 				},
 			}, nil
 		} else {
-			log.Print("Not authorized")
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -778,7 +953,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			}, nil
 		}
 	case "perms":
-		log.Printf("Command `%v` not implemented for user.", subcmd.Name)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Command `%v` not implemented for user.", subcmd.Name),
+			Severity: "INFO",
+		})
 		return &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -787,7 +965,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			},
 		}, nil
 	default:
-		log.Printf("Command `%v` not implemented for user.", subcmd.Name)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Command `%v` not implemented for user.", subcmd.Name),
+			Severity: "INFO",
+		})
 		return &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
@@ -802,7 +983,10 @@ func serverExists(ctx context.Context, name string) bool {
 	serverDoc, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
-			log.Printf("error: serverExists: Get: %v", err)
+			log.Print(LogEntry{
+				Message:  fmt.Sprintf("serverExists: Get: %v", err),
+				Severity: "ERROR",
+			})
 		}
 		return false
 	}
@@ -824,7 +1008,10 @@ func initAESKey() {
 	ctx := context.TODO()
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		log.Fatalf("Error: init: NewClient: %v", err)
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("init: NewClient: %v", err),
+			Severity: "ERROR",
+		})
 	}
 	defer client.Close()
 	req := &secretmanagerpb.AccessSecretVersionRequest{
@@ -832,18 +1019,27 @@ func initAESKey() {
 	}
 	result, err := client.AccessSecretVersion(ctx, req)
 	if err != nil {
-		log.Fatalf("Error: init: AccessSecretVersion: %v", err)
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("init: AccessSecretVersion: %v", err),
+			Severity: "ERROR",
+		})
 	}
 	key := result.Payload.Data
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		log.Panic("init: NewCipher: %v", err)
+		log.Panic(LogEntry{
+			Message:  fmt.Sprintf("init: NewCipher: %v", err),
+			Severity: "CRITICAL",
+		})
 	}
 
 	aesGCM, err = cipher.NewGCM(block)
 	if err != nil {
-		log.Panic("init: NewGCM: %v", err)
+		log.Panic(LogEntry{
+			Message:  fmt.Sprintf("init: NewGCM: %v", err),
+			Severity: "CRITICAL",
+		})
 	}
 }
 
@@ -868,12 +1064,21 @@ func generateConnectUrl(ctx context.Context, user, name string) (string, error) 
 	}
 	// Use to delete in case of error
 	tokenDocUndo := func() {
-		log.Printf("Undo doc creation of %v", newToken.Id)
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Undo doc creation of %v", newToken.Id),
+			Severity: "NOTICE",
+		})
 		if _, err = tokenDoc.Delete(ctx); err != nil {
-			log.Printf("ERROR: Failed to delete document %v in Tokens", newToken.Id)
+			log.Print(LogEntry{
+				Message:  fmt.Sprintf("Failed to delete document %v in Tokens", newToken.Id),
+				Severity: "ERROR",
+			})
 		}
 	}
-	log.Printf("Inserted token %v into Collection Tokens", newToken.Id)
+	log.Print(LogEntry{
+		Message:  fmt.Sprintf("Inserted token %v into Collection Tokens", newToken.Id),
+		Severity: "INFO",
+	})
 	// Encrypt Token
 	rawToken, err := json.Marshal(newToken)
 	if err != nil {
