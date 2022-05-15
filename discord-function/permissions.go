@@ -29,7 +29,7 @@ g = _, _, _
 e = some(where (p.eft == allow))
 	
 [matchers]
-m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.obj == p.obj && r.act == p.act`
+m = (g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.obj == p.obj && r.act == p.act) || (r.act == "perms" && r.dom == "permissions" && r.sub == r.obj)`
 	if rootUserID != "" {
 		modelString = fmt.Sprintf(`[request_definition]
 r = sub, dom, obj, act
@@ -44,7 +44,7 @@ g = _, _, _
 e = some(where (p.eft == allow))
 			
 [matchers]
-m = g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.obj == p.obj && r.act == p.act || r.sub == "%v"`, rootUserID)
+m = (g(r.sub, p.sub, r.dom) && r.dom == p.dom && r.obj == p.obj && r.act == p.act) || (r.act == "perms" && r.dom == "permissions" && r.sub == r.obj) || r.sub == "%v"`, rootUserID)
 	} else {
 		log.Printf("ROOT ID FOUND: %v", rootUserID)
 	}

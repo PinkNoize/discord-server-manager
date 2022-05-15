@@ -260,6 +260,10 @@ func DiscordFunctionEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePing(w http.ResponseWriter) {
+	log.Print(LogEntry{
+		Message:  "Ping received",
+		Severity: "INFO",
+	})
 	_, err := w.Write([]byte(`{"type":1}`))
 	if err != nil {
 		log.Print(LogEntry{
@@ -957,17 +961,70 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			}, nil
 		}
 	case "perms":
-		log.Print(LogEntry{
-			Message:  fmt.Sprintf("Command `%v` not implemented for user.", subcmd.Name),
-			Severity: "INFO",
-		})
-		return &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("Command `%v` not implemented for user.", subcmd.Name),
-				Flags:   uint64(discordgo.MessageFlagsEphemeral),
-			},
-		}, nil
+		if pass, missing := verifyOpts(args, []string{"user"}); !pass {
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		targetUser := args["user"].UserValue(nil)
+		if targetUser.ID == "" {
+			log.Print(LogEntry{
+				Message:  fmt.Sprintf("Target User ID not specified: %v", *targetUser),
+				Severity: "INFO",
+			})
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Target User ID not specified"),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "perms")
+		if err != nil {
+			return nil, fmt.Errorf("enforce: %v", err)
+		}
+		if allowed {
+			// TODO
+			serverRoles := permsChecker.GetServersForUser(targetUser.ID)
+			serverString := strings.Join(serverRoles, "\n")
+			var embeds []*discordgo.MessageEmbed
+			embeds = append(embeds, &discordgo.MessageEmbed{
+				Title: targetUser.Username,
+				Type:  discordgo.EmbedTypeRich,
+				Fields: []*discordgo.MessageEmbedField{
+					{
+						Name:  "Servers",
+						Value: serverString,
+					},
+				},
+			})
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Embeds: embeds,
+					Flags:  uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		} else {
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content:         "Operation not authorized",
+					Flags:           uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:          []*discordgo.MessageEmbed{},
+					AllowedMentions: &discordgo.MessageAllowedMentions{},
+				},
+			}, nil
+		}
 	default:
 		log.Print(LogEntry{
 			Message:  fmt.Sprintf("Command `%v` not implemented for user.", subcmd.Name),
