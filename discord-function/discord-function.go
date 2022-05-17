@@ -75,6 +75,31 @@ func (e LogEntry) String() string {
 	return string(out)
 }
 
+type UserInfo struct {
+	User   *discordgo.User
+	Member *discordgo.Member
+}
+
+func (ui UserInfo) ID() string {
+	if ui.Member != nil {
+		return ui.Member.User.ID
+	} else if ui.User != nil {
+		return ui.User.ID
+	} else {
+		return ""
+	}
+}
+
+func (ui UserInfo) DisplayName() string {
+	if ui.Member != nil {
+		return ui.Member.Nick
+	} else if ui.User != nil {
+		return fmt.Sprintf("%v%v", ui.User.ID, ui.User.Discriminator)
+	} else {
+		return ""
+	}
+}
+
 func init() {
 	var err error
 	// Disable log prefixes such as the default timestamp.
@@ -278,25 +303,21 @@ func handlePing(w http.ResponseWriter) {
 func handleApplicationCommand(ctx context.Context, interaction discordgo.Interaction, w http.ResponseWriter, rawInteraction []byte) {
 	var response *discordgo.InteractionResponse
 	var err error
-	var userID string = ""
-	var username string = ""
-	if interaction.Member != nil {
-		userID = interaction.Member.User.ID
-		username = interaction.Member.User.Username
-	} else if interaction.User != nil {
-		userID = interaction.User.ID
-		username = interaction.User.Username
+	var userInfo UserInfo = UserInfo{
+		User:   interaction.User,
+		Member: interaction.Member,
 	}
+
 	commandData := interaction.ApplicationCommandData()
 	command := commandData.Name
 	log.Print(LogEntry{
-		Message:  fmt.Sprintf("User %v (%v) ran %v", username, userID, command),
+		Message:  fmt.Sprintf("User %v (%v) ran %v", userInfo.DisplayName(), userInfo.ID(), command),
 		Severity: "INFO",
 	})
-	if userID != "" {
+	if userInfo.ID() != "" {
 		switch command {
 		case "server":
-			response, err = handleServerGroupCommand(ctx, username, userID, commandData, rawInteraction)
+			response, err = handleServerGroupCommand(ctx, userInfo, commandData, rawInteraction)
 			if err != nil {
 				log.Print(LogEntry{
 					Message:  fmt.Sprintf("handleApplicationCommand: handleServerGroupCommand: %v", err),
@@ -306,7 +327,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 				return
 			}
 		case "user":
-			response, err = handleUserGroupCommand(ctx, username, userID, commandData, rawInteraction)
+			response, err = handleUserGroupCommand(ctx, userInfo, commandData, rawInteraction)
 			if err != nil {
 				log.Print(LogEntry{
 					Message:  fmt.Sprintf("Error: handleApplicationCommand: handleUserGroupCommand: %v", err),
@@ -349,7 +370,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	}
 }
 
-func handleServerGroupCommand(ctx context.Context, username, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+func handleServerGroupCommand(ctx context.Context, userInfo UserInfo, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
 	log.Print(LogEntry{
@@ -357,7 +378,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 		Severity: "INFO",
 	})
 	args := optionsToMap(subcmd.Options)
-	logCommandToWebhook(fmt.Sprintf("%v (%v)", username, userID), "server", subcmd.Name, args)
+	logCommandToWebhook(fmt.Sprintf("%v (%v)", userInfo.DisplayName(), userInfo.ID()), "server", subcmd.Name, args)
 	switch subcmd.Name {
 	case "create":
 		if pass, missing := verifyOpts(args, []string{"name", "subdomain", "machinetype", "ports"}); !pass {
@@ -382,7 +403,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 				ports),
 			Severity: "INFO",
 		})
-		allowed, err := permsChecker.CheckServerOp(userID, name, "create")
+		allowed, err := permsChecker.CheckServerOp(userInfo.ID(), name, "create")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -487,7 +508,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			Message:  fmt.Sprintf("Server name: %v", name),
 			Severity: "INFO",
 		})
-		allowed, err := permsChecker.CheckServerOp(userID, name, subcmd.Name)
+		allowed, err := permsChecker.CheckServerOp(userInfo.ID(), name, subcmd.Name)
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -584,7 +605,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 			Severity: "INFO",
 		})
 		// Can connect if have start permissions
-		allowed, err := permsChecker.CheckServerOp(userID, name, "start")
+		allowed, err := permsChecker.CheckServerOp(userInfo.ID(), name, "start")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -602,7 +623,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 					},
 				}, nil
 			}
-			connectUrl, err := generateConnectUrl(ctx, userID, name)
+			connectUrl, err := generateConnectUrl(ctx, userInfo.ID(), name)
 			if err != nil {
 				log.Print(LogEntry{
 					Message:  fmt.Sprintf("generateConnectUrl: %v", err),
@@ -652,7 +673,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 				Severity: "INFO",
 			})
 			// Return results for all valid servers
-			servers = permsChecker.GetServersForUser(userID)
+			servers = permsChecker.GetServersForUser(userInfo.ID())
 			if len(servers) < 1 {
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -673,10 +694,10 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 		} else {
 			// Check if user has permission to access the server
 			log.Print(LogEntry{
-				Message:  fmt.Sprintf("%v requested the status for %v", userID, nameIface.StringValue()),
+				Message:  fmt.Sprintf("%v requested the status for %v", userInfo.ID(), nameIface.StringValue()),
 				Severity: "INFO",
 			})
-			allowed, err := permsChecker.CheckServerOp(userID, nameIface.StringValue(), "start")
+			allowed, err := permsChecker.CheckServerOp(userInfo.ID(), nameIface.StringValue(), "start")
 			if err != nil {
 				log.Print(LogEntry{
 					Message:  fmt.Sprintf("CheckServerOp: %v", err),
@@ -759,7 +780,7 @@ func handleServerGroupCommand(ctx context.Context, username, userID string, data
 	}
 }
 
-func handleUserGroupCommand(ctx context.Context, username, userID string, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+func handleUserGroupCommand(ctx context.Context, userInfo UserInfo, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
 	log.Print(LogEntry{
@@ -767,7 +788,7 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 		Severity: "INFO",
 	})
 	args := optionsToMap(subcmd.Options)
-	logCommandToWebhook(fmt.Sprintf("%v (%v)", username, userID), "user", subcmd.Name, args)
+	logCommandToWebhook(fmt.Sprintf("%v (%v)", userInfo.DisplayName(), userInfo.ID()), "user", subcmd.Name, args)
 	switch subcmd.Name {
 	case "add":
 		if pass, missing := verifyOpts(args, []string{"user", "name"}); !pass {
@@ -798,7 +819,7 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			Message:  fmt.Sprintf("Add %v to server %v", targetUser, name),
 			Severity: "INFO",
 		})
-		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "add")
+		allowed, err := permsChecker.CheckUserOp(userInfo.ID(), targetUser.ID, "add")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -893,7 +914,7 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			Message:  fmt.Sprintf("Remove %v from server %v", targetUser, name),
 			Severity: "INFO",
 		})
-		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "add")
+		allowed, err := permsChecker.CheckUserOp(userInfo.ID(), targetUser.ID, "add")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -988,7 +1009,7 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			Message:  fmt.Sprintf("Get perms for %v", targetUser),
 			Severity: "INFO",
 		})
-		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "perms")
+		allowed, err := permsChecker.CheckUserOp(userInfo.ID(), targetUser.ID, "perms")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
@@ -1007,7 +1028,7 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 			serverString := strings.Join(serverRoles, "\n")
 			var embeds []*discordgo.MessageEmbed
 			embeds = append(embeds, &discordgo.MessageEmbed{
-				Title: fmt.Sprintf("<@%v>", targetUser.ID),
+				Title: fmt.Sprintf("%v%v", targetUser.Username, targetUser.Discriminator),
 				Type:  discordgo.EmbedTypeRich,
 				Fields: []*discordgo.MessageEmbedField{
 					{
