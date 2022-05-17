@@ -984,6 +984,10 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 				},
 			}, nil
 		}
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Get perms for %v", targetUser),
+			Severity: "INFO",
+		})
 		allowed, err := permsChecker.CheckUserOp(userID, targetUser.ID, "perms")
 		if err != nil {
 			return nil, fmt.Errorf("enforce: %v", err)
@@ -991,10 +995,19 @@ func handleUserGroupCommand(ctx context.Context, username, userID string, data d
 		if allowed {
 			// TODO
 			serverRoles := permsChecker.GetServersForUser(targetUser.ID)
+			if len(serverRoles) < 1 {
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("<@%v> has no servers", targetUser.ID),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
 			serverString := strings.Join(serverRoles, "\n")
 			var embeds []*discordgo.MessageEmbed
 			embeds = append(embeds, &discordgo.MessageEmbed{
-				Title: targetUser.Username,
+				Title: fmt.Sprintf("<@%v>", targetUser.ID),
 				Type:  discordgo.EmbedTypeRich,
 				Fields: []*discordgo.MessageEmbedField{
 					{
