@@ -92,7 +92,11 @@ func (ui UserInfo) ID() string {
 
 func (ui UserInfo) DisplayName() string {
 	if ui.Member != nil {
-		return ui.Member.Nick
+		name := ui.Member.Nick
+		if name == nil || name == "" {
+			name = fmt.Sprintf("%v%v", ui.Member.User.ID, ui.Member.User.Discriminator)
+		}
+		return name
 	} else if ui.User != nil {
 		return fmt.Sprintf("%v%v", ui.User.ID, ui.User.Discriminator)
 	} else {
@@ -1006,7 +1010,7 @@ func handleUserGroupCommand(ctx context.Context, userInfo UserInfo, data discord
 			}, nil
 		}
 		log.Print(LogEntry{
-			Message:  fmt.Sprintf("Get perms for %v", targetUser),
+			Message:  fmt.Sprintf("Get perms for %+v", targetUser),
 			Severity: "INFO",
 		})
 		allowed, err := permsChecker.CheckUserOp(userInfo.ID(), targetUser.ID, "perms")
@@ -1014,7 +1018,7 @@ func handleUserGroupCommand(ctx context.Context, userInfo UserInfo, data discord
 			return nil, fmt.Errorf("enforce: %v", err)
 		}
 		if allowed {
-			// TODO
+			// TODO: Get targetUser info
 			serverRoles := permsChecker.GetServersForUser(targetUser.ID)
 			if len(serverRoles) < 1 {
 				return &discordgo.InteractionResponse{
