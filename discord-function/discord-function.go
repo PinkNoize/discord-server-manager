@@ -1041,7 +1041,7 @@ func handleUserGroupCommand(ctx context.Context, userInfo *UserInfo, data discor
 				return &discordgo.InteractionResponse{
 					Type: discordgo.InteractionResponseChannelMessageWithSource,
 					Data: &discordgo.InteractionResponseData{
-						Content: fmt.Sprintf("<@%v> has no servers", targetUser.ID),
+						Content: fmt.Sprintf("<@%s> has no servers", targetUser.ID),
 						Flags:   uint64(discordgo.MessageFlagsEphemeral),
 					},
 				}, nil
@@ -1049,8 +1049,7 @@ func handleUserGroupCommand(ctx context.Context, userInfo *UserInfo, data discor
 			serverString := strings.Join(serverRoles, "\n")
 			var embeds []*discordgo.MessageEmbed
 			embeds = append(embeds, &discordgo.MessageEmbed{
-				Title: fmt.Sprintf("%v%v", targetUser.Username, targetUser.Discriminator),
-				Type:  discordgo.EmbedTypeRich,
+				Type: discordgo.EmbedTypeRich,
 				Fields: []*discordgo.MessageEmbedField{
 					{
 						Name:  "Servers",
@@ -1061,8 +1060,9 @@ func handleUserGroupCommand(ctx context.Context, userInfo *UserInfo, data discor
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
-					Embeds: embeds,
-					Flags:  uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:  embeds,
+					Content: fmt.Sprintf("Permissions for <@%s>", targetUser.ID),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
 				},
 			}, nil
 		} else {
