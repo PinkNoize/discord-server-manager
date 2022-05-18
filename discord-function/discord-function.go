@@ -76,29 +76,41 @@ func (e LogEntry) String() string {
 }
 
 type UserInfo struct {
-	User   *discordgo.User
-	Member *discordgo.Member
+	user        *discordgo.User
+	member      *discordgo.Member
+	interaction *discordgo.Interaction
+}
+
+func NewUserInfo(i *discordgo.Interaction) (*UserInfo, error) {
+	if i.User == nil && i.Member == nil {
+		return nil, fmt.Errorf("no valid user in interaction")
+	}
+	return &UserInfo{
+		user:        i.User,
+		member:      i.Member,
+		interaction: i,
+	}, nil
 }
 
 func (ui UserInfo) ID() string {
-	if ui.Member != nil {
-		return ui.Member.User.ID
-	} else if ui.User != nil {
-		return ui.User.ID
+	if ui.member != nil {
+		return ui.member.User.ID
+	} else if ui.user != nil {
+		return ui.user.ID
 	} else {
 		return ""
 	}
 }
 
 func (ui UserInfo) DisplayName() string {
-	if ui.Member != nil {
-		name := ui.Member.Nick
-		if name == nil || name == "" {
-			name = fmt.Sprintf("%v%v", ui.Member.User.ID, ui.Member.User.Discriminator)
+	if ui.member != nil {
+		name := ui.member.Nick
+		if name == "" {
+			name = fmt.Sprintf("%v%v", ui.member.User.ID, ui.member.User.Discriminator)
 		}
 		return name
-	} else if ui.User != nil {
-		return fmt.Sprintf("%v%v", ui.User.ID, ui.User.Discriminator)
+	} else if ui.user != nil {
+		return fmt.Sprintf("%v%v", ui.user.ID, ui.user.Discriminator)
 	} else {
 		return ""
 	}
@@ -274,7 +286,7 @@ func DiscordFunctionEntry(w http.ResponseWriter, r *http.Request) {
 	case discordgo.InteractionApplicationCommand:
 		// Initialize permissions enforcer only once
 		initEnforcer.Do(initalizeEnforcer)
-		handleApplicationCommand(r.Context(), interaction, w, rawInteraction)
+		handleApplicationCommand(r.Context(), &interaction, w, rawInteraction)
 	default:
 		log.Print(LogEntry{
 			Message:  fmt.Sprintf("Unknown Interaction Type: %v", interaction.Type),
@@ -304,12 +316,17 @@ func handlePing(w http.ResponseWriter) {
 	}
 }
 
-func handleApplicationCommand(ctx context.Context, interaction discordgo.Interaction, w http.ResponseWriter, rawInteraction []byte) {
+func handleApplicationCommand(ctx context.Context, interaction *discordgo.Interaction, w http.ResponseWriter, rawInteraction []byte) {
 	var response *discordgo.InteractionResponse
 	var err error
-	var userInfo UserInfo = UserInfo{
-		User:   interaction.User,
-		Member: interaction.Member,
+	userInfo, err := NewUserInfo(interaction)
+	if err != nil {
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("handleApplicationCommand: NewUserInfo: %v", err),
+			Severity: "ERROR",
+		})
+		http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
 	commandData := interaction.ApplicationCommandData()
@@ -374,7 +391,7 @@ func handleApplicationCommand(ctx context.Context, interaction discordgo.Interac
 	}
 }
 
-func handleServerGroupCommand(ctx context.Context, userInfo UserInfo, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
 	log.Print(LogEntry{
@@ -784,7 +801,7 @@ func handleServerGroupCommand(ctx context.Context, userInfo UserInfo, data disco
 	}
 }
 
-func handleUserGroupCommand(ctx context.Context, userInfo UserInfo, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+func handleUserGroupCommand(ctx context.Context, userInfo *UserInfo, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
 	opts := data.Options
 	subcmd := opts[0]
 	log.Print(LogEntry{
