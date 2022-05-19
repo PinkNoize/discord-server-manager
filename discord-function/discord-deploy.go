@@ -44,7 +44,7 @@ var (
 						{
 							Type:        discordgo.ApplicationCommandOptionString,
 							Name:        "ports",
-							Description: "Comma-seperated port numbers to be opened to users",
+							Description: "Space-seperated port numbers to be opened to users",
 							Required:    true,
 						},
 					},

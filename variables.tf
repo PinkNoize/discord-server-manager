@@ -3,7 +3,7 @@ variable "region" {
   default = "us-west2"
 }
 variable "zone" {
-  default = "us-west2-c"
+  default = "us-west2-b"
 }
 variable "dns_project_id" {}
 variable "dns_managed_zone" {}
