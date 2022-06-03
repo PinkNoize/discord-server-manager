@@ -141,8 +141,8 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 		return nil, fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
 	}
 
-	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/monitoring.metricWriter", policy)
-	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/logging.logWriter", policy)
+	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/monitoring.metricWriter", policy, nil)
+	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/logging.logWriter", policy, nil)
 
 	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
@@ -286,6 +286,10 @@ func (s *server) Delete(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("iam.NewService: %v", err)
 	}
+	cloudresourcemanagerService, err := cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		return fmt.Errorf("cloudresourcemanager.NewService: %v", err)
+	}
 
 	// Get instance info
 	instance, err := computeClient.Instances.Get(
@@ -307,6 +311,23 @@ func (s *server) Delete(ctx context.Context) error {
 		return err
 	}
 	log.Printf("Instance %v deleted", s.Name)
+
+	// Remove policy bindings for SA
+	policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+	if err != nil {
+		return fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
+	}
+	for _, sAcc := range instance.ServiceAccounts {
+		removeBindingsForSA(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAcc.Email), policy)
+	}
+
+	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
+		Policy: policy,
+	}
+	policy, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
+	if err != nil {
+		return fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
+	}
 
 	// Delete service account
 	for _, sAcc := range instance.ServiceAccounts {
@@ -507,12 +528,12 @@ func (s *server) IsRunning(ctx context.Context) (bool, error) {
 }
 
 // https://github.com/GoogleCloudPlatform/golang-samples/blob/cc8d05b8732769e07f5da46094a848bde655240d/iam/quickstart/quickstart.go#L69
-func addBinding(crmService *cloudresourcemanager.Service, projectID, member, role string, policy *cloudresourcemanager.Policy) {
+func addBinding(crmService *cloudresourcemanager.Service, projectID, member, role string, policy *cloudresourcemanager.Policy, cond *cloudresourcemanager.Expr) {
 
 	// Find the policy binding for role. Only one binding can have the role.
 	var binding *cloudresourcemanager.Binding
 	for _, b := range policy.Bindings {
-		if b.Role == role {
+		if b.Role == role && b.Condition == cond {
 			binding = b
 			break
 		}
@@ -524,9 +545,27 @@ func addBinding(crmService *cloudresourcemanager.Service, projectID, member, rol
 	} else {
 		// If the binding does not exist, adds a new binding to the policy
 		binding = &cloudresourcemanager.Binding{
-			Role:    role,
-			Members: []string{member},
+			Role:      role,
+			Members:   []string{member},
+			Condition: cond,
 		}
 		policy.Bindings = append(policy.Bindings, binding)
 	}
+}
+
+func removeBindingsForSA(crmService *cloudresourcemanager.Service, projectID, member string, policy *cloudresourcemanager.Policy) {
+	newBindings := policy.Bindings[:0]
+	for _, b := range policy.Bindings {
+		newMembers := b.Members[:0]
+		for _, m := range b.Members {
+			if m != member {
+				newMembers = append(newMembers, m)
+			}
+		}
+		b.Members = newMembers
+		if len(b.Members) > 0 {
+			newBindings = append(newBindings, b)
+		}
+	}
+	policy.Bindings = newBindings
 }

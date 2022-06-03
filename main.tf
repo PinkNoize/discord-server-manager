@@ -91,6 +91,18 @@ resource "google_secret_manager_secret" "secret-basic" {
   }
 }
 
+# Server storage bucket
+
+resource "random_id" "bucket_id" {
+	  byte_length = 8
+}
+
+resource "google_storage_bucket" "server_storage" {
+  name          = "server-storage-${random_id.bucket_id.hex}"
+  location      = var.region
+  uniform_bucket_level_access = true
+}
+
 # Cloud Function Resources
 
 resource "random_id" "id" {
