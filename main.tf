@@ -58,6 +58,15 @@ resource "google_project_service" "crm-proj" {
   disable_on_destroy         = true
 }
 
+#Enable Secret API
+resource "google_project_service" "secman" {
+  project = var.project
+  service = "secretmanager.googleapis.com"
+
+  disable_dependent_services = true
+  disable_on_destroy         = true
+}
+
 # Give cloudbuild access to cloud functions
 resource "google_project_service_identity" "cb_sa" {
   provider = google-beta
