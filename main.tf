@@ -67,6 +67,15 @@ resource "google_project_service" "secman" {
   disable_on_destroy         = true
 }
 
+#Enable App Engine API
+resource "google_project_service" "app-engine-proj" {
+  project = var.project
+  service = "appengine.googleapis.com"
+
+  disable_dependent_services = true
+  disable_on_destroy         = true
+}
+
 # Give cloudbuild access to cloud functions
 resource "google_project_service_identity" "cb_sa" {
   provider = google-beta
