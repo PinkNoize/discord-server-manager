@@ -25,6 +25,7 @@ resource "google_cloudfunctions_function" "function" {
   name    = var.function_name
   region  = var.region
   runtime = "go116"
+  docker_registry = "ARTIFACT_REGISTRY"
 
   available_memory_mb   = 128
   source_repository {
