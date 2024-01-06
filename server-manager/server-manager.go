@@ -14,9 +14,12 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"cloud.google.com/go/storage"
 	"github.com/bwmarrin/discordgo"
+	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
+	iam "google.golang.org/api/iam/v1"
 )
 
 // Globals
@@ -30,6 +33,9 @@ var discordSecretID string = os.Getenv("DISCORD_SECRET_ID")
 var discordAPIToken string
 
 var firestoreClient *firestore.Client
+var storageClient *storage.Client
+var iamService *iam.Service
+var cloudresourcemanagerService *cloudresourcemanager.Service
 var computeClient *compute.Service
 var dnsClient *dns.Service
 var rrClient *dns.ResourceRecordSetsService
@@ -48,6 +54,18 @@ func init() {
 	firestoreClient, err = firestore.NewClient(ctx, projectID)
 	if err != nil {
 		log.Fatalf("Failed to create firestore client: %v", err)
+	}
+	storageClient, err = storage.NewClient(ctx)
+	if err != nil {
+		log.Fatalf("Failed to create storage client: %v", err)
+	}
+	iamService, err = iam.NewService(ctx)
+	if err != nil {
+		log.Fatalf("Failed to create iam service: %v", err)
+	}
+	cloudresourcemanagerService, err = cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		log.Fatalf("cloudresourcemanager.NewService: %v", err)
 	}
 	dnsClient, err = dns.NewService(ctx)
 	if err != nil {
@@ -96,7 +114,10 @@ type createServerArgs struct {
 	Name        *string `json:"name"`
 	Subdomain   *string `json:"subdomain"`
 	MachineType *string `json:"machinetype"`
+	Purpose     *string `json:"purpose"`
 	Ports       *string `json:"ports"`
+	OS          *string `json:"os"`
+	DiskSize    *uint64 `json:"disksize"`
 }
 type deleteServerArgs struct {
 	Name *string `json:"name"`
@@ -314,6 +335,9 @@ func commandCreateServer(ctx context.Context, args *createServerArgs) (*server, 
 	if args.MachineType == nil {
 		return nil, fmt.Errorf("machineType not specified")
 	}
+	if args.Purpose == nil {
+		return nil, fmt.Errorf("purpose not specified")
+	}
 	if args.Ports == nil {
 		return nil, fmt.Errorf("ports not specified")
 	}
@@ -331,7 +355,10 @@ func commandCreateServer(ctx context.Context, args *createServerArgs) (*server, 
 		*args.Name,
 		*args.Subdomain,
 		*args.MachineType,
+		*args.Purpose,
+		*args.OS,
 		ports,
+		*args.DiskSize,
 	)
 }
 

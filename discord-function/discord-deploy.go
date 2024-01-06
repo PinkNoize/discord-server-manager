@@ -43,6 +43,41 @@ var (
 						},
 						{
 							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "purpose",
+							Description: "Purpose of the server",
+							Required:    true,
+							Choices: []*discordgo.ApplicationCommandOptionChoice{
+								{
+									Name:  "Game",
+									Value: "Game",
+								},
+								{
+									Name:  "Server",
+									Value: "Server",
+								},
+							},
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "os",
+							Description: "OS Family (the latest version will be used)",
+							Required:    true,
+							Choices: []*discordgo.ApplicationCommandOptionChoice{
+								{
+									Name:  "Debian",
+									Value: "Debian",
+								},
+							},
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionInteger,
+							Name:        "disksize",
+							Description: "Maximum disk size in GB",
+							Required:    true,
+							MaxValue:    100,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
 							Name:        "ports",
 							Description: "Space-seperated port numbers to be opened to users",
 							Required:    true,

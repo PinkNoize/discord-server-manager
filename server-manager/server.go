@@ -6,8 +6,11 @@ import (
 	"encoding/binary"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
+	"cloud.google.com/go/firestore"
+	"cloud.google.com/go/storage"
 	"github.com/sony/sonyflake"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/compute/v1"
@@ -20,8 +23,15 @@ import (
 
 type ServerStatus uint
 
+// Editing these between deployments can cause confusion
 const (
-	DEPROVISIONING = iota
+	// Internal statuses
+	NEW = iota
+	READY
+	STARTINGUP
+	SAVING
+	// GCP statuses
+	DEPROVISIONING
 	PROVISIONING
 	REPAIRING
 	RUNNING
@@ -35,6 +45,12 @@ const (
 
 func (ss ServerStatus) String() string {
 	switch ss {
+	case NEW:
+		return "NEW"
+	case READY:
+		return "READY"
+	case SAVING:
+		return "SAVING"
 	case DEPROVISIONING:
 		return "DEPROVISIONING"
 	case PROVISIONING:
@@ -61,120 +77,296 @@ func (ss ServerStatus) String() string {
 const publicInterfaceName string = "External NAT"
 
 type server struct {
+	// User configurable
 	Name        string
 	Subdomain   string   `firestore:"subdomain"`
 	MachineType string   `firestore:"machineType"`
+	Purpose     string   `firestore:"purpose"`
+	OSFamily    string   `firestore:"osFamily"`
 	Ports       []uint16 `firestore:"ports"`
+	DiskSizeGB  uint64   `firestore:"diskSizeGB"`
+	// Backend
+	instanceAccount *string      `firestore:"instanceAccount"`
+	bucket          *string      `firestore:"bucket"`
+	status          ServerStatus `firestore:"status"`
 }
 
-func CreateServer(ctx context.Context, name, subdomain, machineType string, ports []uint16) (*server, error) {
-	// TODO: use the Create to check if doc already exists
-	_, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
-	if err != nil && status.Code(err) != codes.NotFound {
-		return nil, fmt.Errorf("failed to get Doc %v", name)
-	}
-	if err == nil {
-		return nil, fmt.Errorf("server %v already exists", name)
-	}
-
-	server := server{
-		Name:        name,
-		Subdomain:   subdomain,
-		MachineType: machineType,
-		Ports:       ports,
-	}
-
-	iamService, err := iam.NewService(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("iam.NewService: %v", err)
-	}
-	cloudresourcemanagerService, err := cloudresourcemanager.NewService(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("cloudresourcemanager.NewService: %v", err)
-	}
-
+func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, osFamily string, ports []uint16, diskSize uint64) (*server, error) {
 	// Create database item
+	server := server{
+		Name:            name,
+		Subdomain:       subdomain,
+		MachineType:     machineType,
+		Purpose:         purpose,
+		OSFamily:        osFamily,
+		Ports:           ports,
+		DiskSizeGB:      diskSize,
+		instanceAccount: nil,
+		bucket:          nil,
+	}
+	// TODO: Add validation for input fields
+	if diskSize > 100 {
+		return nil, fmt.Errorf("disk space must be less than 101 GB: %v GB", diskSize)
+	}
 	serverDoc := firestoreClient.Collection("Servers").Doc(name)
-	_, err = serverDoc.Create(
+	_, err := serverDoc.Create(
 		ctx,
 		server,
 	)
 	if err != nil {
+		if status.Code(err) == codes.AlreadyExists {
+			return nil, fmt.Errorf("server %v already exists", name)
+		}
 		return nil, err
 	}
-	// Use to delete in case of error
-	serverDocUndo := func() {
-		log.Printf("Undo doc creation of %v", name)
-		if _, err = serverDoc.Delete(ctx); err != nil {
-			log.Printf("ERROR: Failed to delete document %v in Servers", name)
-		}
-	}
-	log.Printf("Inserted Doc %v into Collection Servers", name)
+	return &server, server.setup(ctx)
+}
 
-	// Create service account
-	createRequest := &iam.CreateServiceAccountRequest{
-		AccountId: fmt.Sprintf("%s-server-compute", name),
-		ServiceAccount: &iam.ServiceAccount{
-			DisplayName: fmt.Sprintf("%v Compute Service Account", name),
+func ServerFromName(ctx context.Context, name string) (*server, error) {
+	serverDoc, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Doc %v: %v", name, err)
+	}
+	if !serverDoc.Exists() {
+		return nil, fmt.Errorf("server %v does not exist", name)
+	}
+	server := server{}
+	err = serverDoc.DataTo(&server)
+	server.Name = name
+	if err != nil {
+		return nil, err
+	}
+	return &server, nil
+}
+
+func (s *server) getDocRef() *firestore.DocumentRef {
+	return firestoreClient.Collection("Servers").Doc(s.Name)
+}
+
+func (s *server) syncFromDB(ctx context.Context) error {
+	if newServer, err := ServerFromName(ctx, s.Name); err != nil {
+		return fmt.Errorf("serverFromName: %v", err)
+	} else {
+		*s = *newServer
+		return nil
+	}
+}
+
+// Setters
+func (s *server) updateDBfield(ctx context.Context, field string, value interface{}) error {
+	update := []firestore.Update{
+		{
+			Path:  field,
+			Value: value,
 		},
 	}
-	sAccount, err := iamService.Projects.ServiceAccounts.Create("projects/"+projectID, createRequest).Do()
+	_, err := s.getDocRef().Update(ctx, update)
 	if err != nil {
-		defer serverDocUndo()
-		return nil, fmt.Errorf("Projects.ServiceAccounts.Create: %v", err)
+		return fmt.Errorf("update: %v", err)
 	}
-	log.Printf("Created service account %v", sAccount.Email)
+	return nil
+}
 
-	sAccountUndo := func() {
-		log.Printf("Undo service account creation of %v", name)
-		_, err = iamService.Projects.ServiceAccounts.Delete(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount.Email)).Do()
+func (s *server) setBucketName(ctx context.Context, bucket *string) error {
+	err := s.updateDBfield(ctx, "bucket", *bucket)
+	if err != nil {
+		return fmt.Errorf("updateDBfield: %v", err)
+	}
+	s.bucket = bucket
+	return nil
+}
+
+func (s *server) setInstanceAccount(ctx context.Context, account *string) error {
+	err := s.updateDBfield(ctx, "instanceAccount", *account)
+	if err != nil {
+		return fmt.Errorf("updateDBfield: %v", err)
+	}
+	s.instanceAccount = account
+	return nil
+}
+
+func (s *server) setStatus(ctx context.Context, status ServerStatus) error {
+	err := s.updateDBfield(ctx, "status", status)
+	if err != nil {
+		return fmt.Errorf("updateDBfield: %v", err)
+	}
+	s.status = status
+	return nil
+}
+
+func (s *server) isSetup() bool {
+	return s.bucket != nil && s.instanceAccount != nil
+}
+
+func (s *server) setup(ctx context.Context) error {
+	if s.bucket == nil {
+		// Create bucket
+		flake := sonyflake.NewSonyflake(sonyflake.Settings{
+			MachineID: func() (uint16, error) { return 0x6969, nil },
+		})
+		flakeID, err := flake.NextID()
 		if err != nil {
-			log.Printf("ERROR: Failed to delete service account: Projects.ServiceAccounts.Delete: %v", err)
+			return fmt.Errorf("flake.NextID: %v", err)
+		}
+		flakeIDbyte := make([]byte, 8)
+		binary.BigEndian.PutUint64(flakeIDbyte, flakeID)
+		id := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(flakeIDbyte))
+		bucketName := fmt.Sprintf("%v-storage-%v", s.Name, id)
+		bucket := storageClient.Bucket(bucketName)
+		attrs := storage.BucketAttrs{
+			Location:     projectZone,
+			LocationType: "region",
+			Labels: map[string]string{
+				"server": generateServerTag(s.Name),
+			},
+		}
+		if err := bucket.Create(ctx, projectID, &attrs); err != nil {
+			return fmt.Errorf("bucket.Create: %v", err)
+		}
+		log.Printf("Bucket created successfully: %v", bucketName)
+		err = s.setBucketName(ctx, &bucketName)
+		if err != nil {
+			return fmt.Errorf("setBucketName: %v", err)
 		}
 	}
+	if s.instanceAccount == nil {
+		// Create service account
+		createRequest := &iam.CreateServiceAccountRequest{
+			AccountId: fmt.Sprintf("%s-server-compute", s.Name),
+			ServiceAccount: &iam.ServiceAccount{
+				DisplayName: fmt.Sprintf("%v Compute Service Account", s.Name),
+			},
+		}
+		sAccount, err := iamService.Projects.ServiceAccounts.Create("projects/"+projectID, createRequest).Do()
+		if err != nil {
+			return fmt.Errorf("Projects.ServiceAccounts.Create: %v", err)
+		}
+		log.Printf("Created service account %v", sAccount.Email)
+		err = s.setInstanceAccount(ctx, &sAccount.Email)
+		if err != nil {
+			return fmt.Errorf("setInstanceAccount: %v", err)
+		}
 
-	// Set IAM Policy
-	policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
-	if err != nil {
-		defer serverDocUndo()
-		defer sAccountUndo()
-		return nil, fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
+		// Set IAM Policy
+		policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+		if err != nil {
+			return fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
+		}
+
+		addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/monitoring.metricWriter", policy, nil)
+		addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/logging.logWriter", policy, nil)
+
+		setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
+			Policy: policy,
+		}
+		_, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
+		if err != nil {
+			return fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
+		}
+		log.Printf("Binded service account %v to policy", s.instanceAccount)
 	}
-
-	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/monitoring.metricWriter", policy, nil)
-	addBinding(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount.Email), "roles/logging.logWriter", policy, nil)
-
-	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
-		Policy: policy,
+	// Update Status
+	if err := s.setStatus(ctx, READY); err != nil {
+		return fmt.Errorf("setStatus: %v", err)
 	}
-	policy, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
-	if err != nil {
-		defer serverDocUndo()
-		defer sAccountUndo()
-		return nil, fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
-	}
+	return nil
+}
 
+func (s *server) unsetup(ctx context.Context) error {
+	if s.bucket != nil {
+		bucketName := s.bucket
+		bucket := storageClient.Bucket(*bucketName)
+		if err := bucket.Delete(ctx); err != nil {
+			return fmt.Errorf("bucket.Delete: %v", err)
+		}
+		log.Printf("Bucket deleted successfully: %v", bucketName)
+		if err := s.setBucketName(ctx, nil); err != nil {
+			return fmt.Errorf("setBucketName: %v", err)
+		}
+	}
+	if s.instanceAccount != nil {
+		sAccount := *s.instanceAccount
+		// Remove policy bindings for SA
+		policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
+		if err != nil {
+			return fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
+		}
+		removeBindingsForSA(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAccount), policy)
+
+		setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
+			Policy: policy,
+		}
+		_, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
+		if err != nil {
+			return fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
+		}
+		// Delete service account
+		_, err = iamService.Projects.ServiceAccounts.Delete(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAccount)).Do()
+		if err != nil {
+			return fmt.Errorf("Projects.ServiceAccounts.Delete: %v", err)
+		}
+		log.Printf("Deleted service account %v", sAccount)
+		err = s.setInstanceAccount(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("setInstanceAccount: %v", err)
+		}
+	}
+	if err := s.setStatus(ctx, NEW); err != nil {
+		return fmt.Errorf("setStatus: %v", err)
+	}
+	return nil
+}
+
+func (s *server) getInstanceBaseImage(ctx context.Context) (string, error) {
+	project := ""
+	switch {
+	case strings.HasPrefix(s.OSFamily, "debian"):
+		project = "debian-cloud"
+	default:
+		return "", fmt.Errorf("OS family unknown: %v", s.OSFamily)
+	}
 	// Get compute instance image
 	imageResponse, err := computeClient.Images.GetFromFamily(
-		"debian-cloud",
-		"debian-11",
+		project,
+		s.OSFamily,
 	).Context(ctx).Do()
 	if err != nil {
-		defer serverDocUndo()
-		defer sAccountUndo()
-		return nil, err
+		return "", err
 	}
 	sourceImage := imageResponse.SelfLink
 	log.Printf("Found source image: %v", sourceImage)
+	return sourceImage, nil
+}
 
-	// Generate compute instance config
-	machineTypePath := fmt.Sprintf("zones/%s/machineTypes/%s", projectZone, machineType)
+func (s *server) Start(ctx context.Context) error {
+	if !s.isSetup() {
+		err := s.setup(ctx)
+		if err != nil {
+			return fmt.Errorf("setup: %v", err)
+		}
+	}
+	// Check that instance is in a startable state
+	status, err := s.Status(ctx)
+	if err != nil {
+		return fmt.Errorf("GetStatus: %v", err)
+	}
+	switch status {
+	case READY:
+	default:
+		return fmt.Errorf("server not in a startable state: %v", status)
+	}
+
+	// Get instance config
+	sourceImage, err := s.getInstanceBaseImage(ctx)
+	if err != nil {
+		return fmt.Errorf("getInstanceBaseImage: %v", err)
+	}
 
 	startupScript := "#!/bin/bash\n/startup.sh"
 	shutdownScript := "#!/bin/bash\n/shutdown.sh"
 	instanceConfig := compute.Instance{
-		Name:        name,
-		MachineType: machineTypePath,
+		Name:        s.Name,
+		MachineType: fmt.Sprintf("zones/%s/machineTypes/%s", projectZone, s.MachineType),
 		Disks: []*compute.AttachedDisk{
 			{
 				Boot:       true,
@@ -197,6 +389,10 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 				},
 			},
 		},
+		Scheduling: &compute.Scheduling{
+			ProvisioningModel:         "SPOT",
+			InstanceTerminationAction: "DELETE",
+		},
 		Metadata: &compute.Metadata{
 			Items: []*compute.MetadataItems{
 				{
@@ -211,60 +407,34 @@ func CreateServer(ctx context.Context, name, subdomain, machineType string, port
 		},
 		ServiceAccounts: []*compute.ServiceAccount{
 			{
-				Email:  sAccount.Email,
+				Email:  *s.instanceAccount,
 				Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
 			},
 		},
 		Labels: map[string]string{
-			"server": generateServerTag(name),
+			"server": generateServerTag(s.Name),
 		},
 		Tags: &compute.Tags{
-			Items: []string{generateServerTag(name)},
+			Items: []string{generateServerTag(s.Name)},
 		},
 	}
-	// Create Compute instance
-	_, err = computeClient.Instances.Insert(
+	instance, err := computeClient.Instances.Insert(
 		projectID,
 		projectZone,
 		&instanceConfig,
 	).Context(ctx).Do()
 	if err != nil {
-		defer serverDocUndo()
-		defer sAccountUndo()
-		return nil, err
+		return fmt.Errorf("instances.insert: %v", err)
 	}
-	log.Printf("Created instance %v", name)
-
-	return &server, nil
-}
-
-func ServerFromName(ctx context.Context, name string) (*server, error) {
-	serverDoc, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Doc %v: %v", name, err)
+	log.Printf("Created instance %v for %v", instance.Id, s.Name)
+	if err := s.setStatus(ctx, STARTINGUP); err != nil {
+		return fmt.Errorf("setStatus: %v", err)
 	}
-	if !serverDoc.Exists() {
-		return nil, fmt.Errorf("server %v does not exist", name)
+	// TODO: Create volume and attach it
+	// Update server status
+	if err := s.setStatus(ctx, RUNNING); err != nil {
+		return fmt.Errorf("setStatus: %v", err)
 	}
-	server := server{}
-	err = serverDoc.DataTo(&server)
-	server.Name = name
-	if err != nil {
-		return nil, err
-	}
-	return &server, nil
-}
-
-func (s *server) Start(ctx context.Context) error {
-	_, err := computeClient.Instances.Start(
-		projectID,
-		projectZone,
-		s.Name,
-	).Context(ctx).Do()
-	if err != nil {
-		return err
-	}
-	log.Printf("Server %v starting", s.Name)
 	return nil
 }
 
@@ -282,15 +452,19 @@ func (s *server) Stop(ctx context.Context) error {
 }
 
 func (s *server) Delete(ctx context.Context) error {
-	iamService, err := iam.NewService(ctx)
+	// Check status is in a deletable state
+	status, err := s.Status(ctx)
 	if err != nil {
-		return fmt.Errorf("iam.NewService: %v", err)
+		return fmt.Errorf("GetStatus: %v", err)
 	}
-	cloudresourcemanagerService, err := cloudresourcemanager.NewService(ctx)
-	if err != nil {
-		return fmt.Errorf("cloudresourcemanager.NewService: %v", err)
+	switch status {
+	case NEW, READY:
+	default:
+		return fmt.Errorf("server not in a deletable state: %v", status)
 	}
-
+	if err := s.unsetup(ctx); err != nil {
+		return fmt.Errorf("unsetup: %v", err)
+	}
 	// Get instance info
 	instance, err := computeClient.Instances.Get(
 		projectID,
@@ -324,7 +498,7 @@ func (s *server) Delete(ctx context.Context) error {
 	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
 		Policy: policy,
 	}
-	policy, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
+	_, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
 	if err != nil {
 		return fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
 	}
@@ -357,6 +531,13 @@ func (s *server) Status(ctx context.Context) (ServerStatus, error) {
 		s.Name,
 	).Context(ctx).Do()
 	if err != nil {
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == http.StatusNotFound {
+			// Instance not found
+			if err := s.syncFromDB(ctx); err != nil {
+				return UNKNOWN, fmt.Errorf("syncFromDB: %v", err)
+			}
+			return s.status, nil
+		}
 		return UNKNOWN, err
 	}
 	status := instance.Status
