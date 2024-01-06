@@ -76,6 +76,15 @@ resource "google_project_service" "app-engine-proj" {
   disable_on_destroy         = true
 }
 
+#Enable Artifact Registry API
+resource "google_project_service" "artifact-proj" {
+  project = var.project
+  service = "artifactregistry.googleapis.com"
+
+  disable_dependent_services = true
+  disable_on_destroy         = true
+}
+
 # Give cloudbuild access to cloud functions
 resource "google_project_service_identity" "cb_sa" {
   provider = google-beta
