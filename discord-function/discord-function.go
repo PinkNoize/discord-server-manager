@@ -224,12 +224,7 @@ func logCommandToWebhook(username, command, subcmd string, args map[string]*disc
 	for arg, option := range args {
 		v := "nil"
 		if option != nil {
-			switch option.Type {
-			case discordgo.ApplicationCommandOptionInteger:
-				v = fmt.Sprintf("%s", option.IntValue())
-			default:
-				v = fmt.Sprintf("%s", option.Value)
-			}
+			v = fmt.Sprintf("%v", option.Value)
 		}
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:  arg,
