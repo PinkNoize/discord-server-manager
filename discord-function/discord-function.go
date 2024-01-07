@@ -427,7 +427,7 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 				ports,
 				purpose,
 				os,
-				fmt.Sprintf("%v", disksize),
+				disksize,
 			),
 			Severity: "INFO",
 		})
@@ -478,7 +478,7 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 					"ports":       ports,
 					"purpose":     purpose,
 					"os":          os,
-					"disksize":    disksize,
+					"disksize":    fmt.Sprintf("%v", disksize),
 				},
 			})
 			_, err = result.Get(ctx)
