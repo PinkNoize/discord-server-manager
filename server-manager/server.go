@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type ServerStatus uint
+type ServerStatus int
 
 // Editing these between deployments can cause confusion
 const (
