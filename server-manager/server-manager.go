@@ -117,7 +117,7 @@ type createServerArgs struct {
 	Purpose     *string `json:"purpose"`
 	Ports       *string `json:"ports"`
 	OS          *string `json:"os"`
-	DiskSize    *uint64 `json:"disksize"`
+	DiskSize    *string `json:"disksize"`
 }
 type deleteServerArgs struct {
 	Name *string `json:"name"`
@@ -349,6 +349,10 @@ func commandCreateServer(ctx context.Context, args *createServerArgs) (*server, 
 		}
 		ports = append(ports, uint16(tmp))
 	}
+	disksize, err := strconv.ParseUint(*args.DiskSize, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("parseuint: %v", err)
+	}
 	log.Printf("Creating %v (%v) - %v", *args.Name, *args.MachineType, *args.Subdomain)
 	return CreateServer(
 		ctx,
@@ -358,7 +362,7 @@ func commandCreateServer(ctx context.Context, args *createServerArgs) (*server, 
 		*args.Purpose,
 		*args.OS,
 		ports,
-		*args.DiskSize,
+		disksize,
 	)
 }
 
