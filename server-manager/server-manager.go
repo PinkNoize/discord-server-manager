@@ -24,6 +24,7 @@ import (
 
 // Globals
 var projectID string = os.Getenv("PROJECT_ID")
+var projectRegion string = os.Getenv("PROJECT_REGION")
 var projectZone string = os.Getenv("PROJECT_ZONE")
 var dnsProjectID string = os.Getenv("DNS_PROJECT_ID")
 var dnsZone string = os.Getenv("DNS_MANAGED_ZONE")

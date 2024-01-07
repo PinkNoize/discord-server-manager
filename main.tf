@@ -187,6 +187,7 @@ module "command_function" {
   function_entry_point  = "CommandPubSub"
   environment_variables = {
     "PROJECT_ID"        = var.project
+    "PROJECT_REGION"    = var.region
     "PROJECT_ZONE"      = var.zone
     "DNS_PROJECT_ID"    = var.dns_project_id
     "DNS_MANAGED_ZONE"  = var.dns_managed_zone

@@ -215,7 +215,7 @@ func (s *server) setup(ctx context.Context) error {
 		bucketName := fmt.Sprintf("%v-storage-%v", s.Name, id)
 		bucket := storageClient.Bucket(bucketName)
 		attrs := storage.BucketAttrs{
-			Location:     projectZone,
+			Location:     projectRegion,
 			LocationType: "region",
 			Labels: map[string]string{
 				"server": generateServerTag(s.Name),
