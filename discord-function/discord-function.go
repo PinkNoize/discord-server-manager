@@ -402,7 +402,7 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 	logCommandToWebhook(fmt.Sprintf("%v (%v)", userInfo.DisplayName(), userInfo.ID()), "server", subcmd.Name, args)
 	switch subcmd.Name {
 	case "create":
-		if pass, missing := verifyOpts(args, []string{"name", "subdomain", "machinetype", "ports"}); !pass {
+		if pass, missing := verifyOpts(args, []string{"name", "subdomain", "machinetype", "ports", "purpose", "os", "disksize"}); !pass {
 			return &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -415,13 +415,20 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 		subdomain := args["subdomain"].StringValue()
 		machineType := args["machinetype"].StringValue()
 		ports := args["ports"].StringValue()
+		purpose := args["purpose"].StringValue()
+		os := args["os"].StringValue()
+		disksize := args["disksize"].StringValue()
 		log.Print(LogEntry{
 			Message: fmt.Sprintf(
-				"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v",
+				"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v\nPurpose: %v\nOS: %v\nDisksize: %v",
 				name,
 				subdomain,
 				machineType,
-				ports),
+				ports,
+				purpose,
+				os,
+				disksize,
+			),
 			Severity: "INFO",
 		})
 		allowed, err := permsChecker.CheckServerOp(userInfo.ID(), name, "create")
@@ -469,6 +476,9 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 					"subdomain":   subdomain,
 					"machinetype": machineType,
 					"ports":       ports,
+					"purpose":     purpose,
+					"os":          os,
+					"disksize":    disksize,
 				},
 			})
 			_, err = result.Get(ctx)
