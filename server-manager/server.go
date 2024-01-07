@@ -449,6 +449,10 @@ func (s *server) Stop(ctx context.Context) error {
 		return err
 	}
 	log.Printf("Server %v stopped", s.Name)
+	// TODO: Update status to saving
+	if err := s.setStatus(ctx, READY); err != nil {
+		return fmt.Errorf("setStatus: %v", err)
+	}
 	return nil
 }
 
@@ -465,54 +469,6 @@ func (s *server) Delete(ctx context.Context) error {
 	}
 	if err := s.unsetup(ctx); err != nil {
 		return fmt.Errorf("unsetup: %v", err)
-	}
-	// Get instance info
-	instance, err := computeClient.Instances.Get(
-		projectID,
-		projectZone,
-		s.Name,
-	).Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("error: Instances.get: %v", err)
-	}
-
-	// Delete compute instance
-	_, err = computeClient.Instances.Delete(
-		projectID,
-		projectZone,
-		s.Name,
-	).Context(ctx).Do()
-	if err != nil {
-		return err
-	}
-	log.Printf("Instance %v deleted", s.Name)
-
-	// Remove policy bindings for SA
-	policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
-	if err != nil {
-		return fmt.Errorf("Projects.ServiceAccounts.GetIamPolicy: %v", err)
-	}
-	for _, sAcc := range instance.ServiceAccounts {
-		removeBindingsForSA(cloudresourcemanagerService, projectID, fmt.Sprintf("serviceAccount:%s", sAcc.Email), policy)
-	}
-
-	setIamPolicyRequest := &cloudresourcemanager.SetIamPolicyRequest{
-		Policy: policy,
-	}
-	_, err = cloudresourcemanagerService.Projects.SetIamPolicy(projectID, setIamPolicyRequest).Do()
-	if err != nil {
-		return fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
-	}
-
-	// Delete service account
-	for _, sAcc := range instance.ServiceAccounts {
-		_, err = iamService.Projects.ServiceAccounts.Delete(fmt.Sprintf("projects/%s/serviceAccounts/%s", projectID, sAcc.Email)).Do()
-		if err != nil {
-			log.Printf("error: Unable to delete %v. Manually delete the account", sAcc.Email)
-		} else {
-			log.Printf("Deleted service account %v", sAcc.Email)
-		}
-
 	}
 
 	// Delete database entry
