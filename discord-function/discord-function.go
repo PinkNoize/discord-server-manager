@@ -417,7 +417,7 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 		ports := args["ports"].StringValue()
 		purpose := args["purpose"].StringValue()
 		os := args["os"].StringValue()
-		disksize := args["disksize"].StringValue()
+		disksize := args["disksize"].UintValue()
 		log.Print(LogEntry{
 			Message: fmt.Sprintf(
 				"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v\nPurpose: %v\nOS: %v\nDisksize: %v",
@@ -427,7 +427,7 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 				ports,
 				purpose,
 				os,
-				disksize,
+				fmt.Sprintf("%v", disksize),
 			),
 			Severity: "INFO",
 		})

@@ -13,7 +13,8 @@ import (
 )
 
 var (
-	commands = []*discordgo.ApplicationCommand{
+	minDiskSize = 1.0
+	commands    = []*discordgo.ApplicationCommand{
 		{
 			Name:        "server",
 			Description: "View/Modify servers' states",
@@ -75,6 +76,7 @@ var (
 							Description: "Maximum disk size in GB",
 							Required:    true,
 							MaxValue:    100,
+							MinValue:    &minDiskSize,
 						},
 						{
 							Type:        discordgo.ApplicationCommandOptionString,
