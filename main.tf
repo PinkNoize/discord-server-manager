@@ -158,6 +158,12 @@ resource "google_project_iam_member" "compute-iam" {
   member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
+resource "google_project_iam_member" "storage-iam" {
+  project = var.project
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
+}
+
 resource "google_project_iam_member" "sa-compute-iam" {
   project = var.project
   role    = "roles/iam.serviceAccountUser"
