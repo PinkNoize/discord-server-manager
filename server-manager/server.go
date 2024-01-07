@@ -84,14 +84,14 @@ type server struct {
 	Purpose     string   `firestore:"purpose"`
 	OSFamily    string   `firestore:"osFamily"`
 	Ports       []uint16 `firestore:"ports"`
-	DiskSizeGB  uint64   `firestore:"diskSizeGB"`
+	DiskSizeGB  int64    `firestore:"diskSizeGB"`
 	// Backend
 	instanceAccount *string      `firestore:"instanceAccount"`
 	bucket          *string      `firestore:"bucket"`
 	status          ServerStatus `firestore:"status"`
 }
 
-func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, osFamily string, ports []uint16, diskSize uint64) (*server, error) {
+func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, osFamily string, ports []uint16, diskSize int64) (*server, error) {
 	// Create database item
 	server := server{
 		Name:            name,
@@ -103,9 +103,10 @@ func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, os
 		DiskSizeGB:      diskSize,
 		instanceAccount: nil,
 		bucket:          nil,
+		status:          NEW,
 	}
 	// TODO: Add validation for input fields
-	if diskSize > 100 {
+	if diskSize > 100 && diskSize >= 1 {
 		return nil, fmt.Errorf("disk space must be less than 101 GB: %v GB", diskSize)
 	}
 	serverDoc := firestoreClient.Collection("Servers").Doc(name)
@@ -117,9 +118,9 @@ func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, os
 		if status.Code(err) == codes.AlreadyExists {
 			return nil, fmt.Errorf("server %v already exists", name)
 		}
-		return nil, err
+		return nil, fmt.Errorf("serverDoc.create: %v", err)
 	}
-	return &server, server.setup(ctx)
+	return &server, nil
 }
 
 func ServerFromName(ctx context.Context, name string) (*server, error) {

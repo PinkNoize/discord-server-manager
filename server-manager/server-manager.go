@@ -349,7 +349,7 @@ func commandCreateServer(ctx context.Context, args *createServerArgs) (*server, 
 		}
 		ports = append(ports, uint16(tmp))
 	}
-	disksize, err := strconv.ParseUint(*args.DiskSize, 10, 64)
+	disksize, err := strconv.ParseInt(*args.DiskSize, 10, 32)
 	if err != nil {
 		return nil, fmt.Errorf("parseuint: %v", err)
 	}

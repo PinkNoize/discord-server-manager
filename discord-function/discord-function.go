@@ -224,7 +224,12 @@ func logCommandToWebhook(username, command, subcmd string, args map[string]*disc
 	for arg, option := range args {
 		v := "nil"
 		if option != nil {
-			v = fmt.Sprintf("%s", option.Value)
+			switch option.Type {
+			case discordgo.ApplicationCommandOptionInteger:
+				v = fmt.Sprintf("%s", option.IntValue())
+			default:
+				v = fmt.Sprintf("%s", option.Value)
+			}
 		}
 		fields = append(fields, &discordgo.MessageEmbedField{
 			Name:  arg,
@@ -417,7 +422,7 @@ func handleServerGroupCommand(ctx context.Context, userInfo *UserInfo, data disc
 		ports := args["ports"].StringValue()
 		purpose := args["purpose"].StringValue()
 		os := args["os"].StringValue()
-		disksize := args["disksize"].UintValue()
+		disksize := args["disksize"].IntValue()
 		log.Print(LogEntry{
 			Message: fmt.Sprintf(
 				"Server Name: %v\nSubdomain: %v\nMachineType: %v\nPorts: %v\nPurpose: %v\nOS: %v\nDisksize: %v",
