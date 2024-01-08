@@ -321,7 +321,7 @@ func (s *server) unsetup(ctx context.Context) error {
 func (s *server) getInstanceBaseImage(ctx context.Context) (string, error) {
 	project := ""
 	switch {
-	case strings.HasPrefix(s.OSFamily, "debian"):
+	case strings.HasPrefix(strings.ToLower(s.OSFamily), "debian"):
 		project = "debian-cloud"
 	default:
 		return "", fmt.Errorf("OS family unknown: %v", s.OSFamily)
