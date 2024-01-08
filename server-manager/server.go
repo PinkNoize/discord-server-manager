@@ -169,7 +169,11 @@ func (s *server) updateDBfield(ctx context.Context, field string, value interfac
 }
 
 func (s *server) setBucketName(ctx context.Context, bucket *string) error {
-	err := s.updateDBfield(ctx, "bucket", *bucket)
+	var new_v interface{} = firestore.Delete
+	if bucket != nil {
+		new_v = *bucket
+	}
+	err := s.updateDBfield(ctx, "bucket", new_v)
 	if err != nil {
 		return fmt.Errorf("updateDBfield: %v", err)
 	}
@@ -178,7 +182,11 @@ func (s *server) setBucketName(ctx context.Context, bucket *string) error {
 }
 
 func (s *server) setInstanceAccount(ctx context.Context, account *string) error {
-	err := s.updateDBfield(ctx, "instanceAccount", *account)
+	var new_v interface{} = firestore.Delete
+	if account != nil {
+		new_v = *account
+	}
+	err := s.updateDBfield(ctx, "instanceAccount", new_v)
 	if err != nil {
 		return fmt.Errorf("updateDBfield: %v", err)
 	}
@@ -323,6 +331,8 @@ func (s *server) getInstanceBaseImage(ctx context.Context) (string, error) {
 	switch {
 	case strings.HasPrefix(strings.ToLower(s.OSFamily), "debian"):
 		project = "debian-cloud"
+	case strings.HasPrefix(strings.ToLower(s.OSFamily), "ubuntu"):
+		project = "ubuntu-os-cloud"
 	default:
 		return "", fmt.Errorf("OS family unknown: %v", s.OSFamily)
 	}

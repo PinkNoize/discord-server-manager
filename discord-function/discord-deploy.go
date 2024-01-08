@@ -65,8 +65,12 @@ var (
 							Required:    true,
 							Choices: []*discordgo.ApplicationCommandOptionChoice{
 								{
-									Name:  "Debian",
-									Value: "Debian",
+									Name:  "Debian 12",
+									Value: "debian-12",
+								},
+								{
+									Name:  "Ubuntu 22.04",
+									Value: "ubuntu-2204-lts",
 								},
 							},
 						},
