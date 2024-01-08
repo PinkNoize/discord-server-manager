@@ -450,7 +450,7 @@ func (s *server) Start(ctx context.Context) error {
 }
 
 func (s *server) Stop(ctx context.Context) error {
-	_, err := computeClient.Instances.Stop(
+	_, err := computeClient.Instances.Delete(
 		projectID,
 		projectZone,
 		s.Name,
