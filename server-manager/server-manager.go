@@ -499,7 +499,7 @@ func commandStatus(ctx context.Context, args *statusArgs) ([]*discordgo.MessageE
 			var statusString string
 			var domainString string
 
-			status, err := serverInfo.Status(ctx)
+			status, err := serverInfo.GetStatus(ctx)
 			if err != nil {
 				log.Printf("error: commandStatus: Status: %v", err)
 				statusString = "Unable to get status"

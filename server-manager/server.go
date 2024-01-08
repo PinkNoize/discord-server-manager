@@ -86,9 +86,9 @@ type server struct {
 	Ports       []uint16 `firestore:"ports"`
 	DiskSizeGB  int64    `firestore:"diskSizeGB"`
 	// Backend
-	instanceAccount *string      `firestore:"instanceAccount"`
-	bucket          *string      `firestore:"bucket"`
-	status          ServerStatus `firestore:"status"`
+	InstanceAccount *string      `firestore:"instanceAccount"`
+	Bucket          *string      `firestore:"bucket"`
+	Status          ServerStatus `firestore:"status"`
 }
 
 func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, osFamily string, ports []uint16, diskSize int64) (*server, error) {
@@ -101,9 +101,9 @@ func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, os
 		OSFamily:        osFamily,
 		Ports:           ports,
 		DiskSizeGB:      diskSize,
-		instanceAccount: nil,
-		bucket:          nil,
-		status:          NEW,
+		InstanceAccount: nil,
+		Bucket:          nil,
+		Status:          NEW,
 	}
 	// TODO: Add validation for input fields
 	if diskSize > 100 && diskSize >= 1 {
@@ -173,7 +173,7 @@ func (s *server) setBucketName(ctx context.Context, bucket *string) error {
 	if err != nil {
 		return fmt.Errorf("updateDBfield: %v", err)
 	}
-	s.bucket = bucket
+	s.Bucket = bucket
 	return nil
 }
 
@@ -182,7 +182,7 @@ func (s *server) setInstanceAccount(ctx context.Context, account *string) error 
 	if err != nil {
 		return fmt.Errorf("updateDBfield: %v", err)
 	}
-	s.instanceAccount = account
+	s.InstanceAccount = account
 	return nil
 }
 
@@ -191,16 +191,16 @@ func (s *server) setStatus(ctx context.Context, status ServerStatus) error {
 	if err != nil {
 		return fmt.Errorf("updateDBfield: %v", err)
 	}
-	s.status = status
+	s.Status = status
 	return nil
 }
 
 func (s *server) isSetup() bool {
-	return s.bucket != nil && s.instanceAccount != nil
+	return s.Bucket != nil && s.InstanceAccount != nil
 }
 
 func (s *server) setup(ctx context.Context) error {
-	if s.bucket == nil {
+	if s.Bucket == nil {
 		// Create bucket
 		flake := sonyflake.NewSonyflake(sonyflake.Settings{
 			MachineID: func() (uint16, error) { return 0x6969, nil },
@@ -230,7 +230,7 @@ func (s *server) setup(ctx context.Context) error {
 			return fmt.Errorf("setBucketName: %v", err)
 		}
 	}
-	if s.instanceAccount == nil {
+	if s.InstanceAccount == nil {
 		// Create service account
 		createRequest := &iam.CreateServiceAccountRequest{
 			AccountId: fmt.Sprintf("%s-server-compute", s.Name),
@@ -264,7 +264,7 @@ func (s *server) setup(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("Projects.ServiceAccounts.SetIamPolicy: %v", err)
 		}
-		log.Printf("Binded service account %v to policy", s.instanceAccount)
+		log.Printf("Binded service account %v to policy", s.InstanceAccount)
 	}
 	// Update Status
 	if err := s.setStatus(ctx, READY); err != nil {
@@ -274,8 +274,8 @@ func (s *server) setup(ctx context.Context) error {
 }
 
 func (s *server) unsetup(ctx context.Context) error {
-	if s.bucket != nil {
-		bucketName := s.bucket
+	if s.Bucket != nil {
+		bucketName := s.Bucket
 		bucket := storageClient.Bucket(*bucketName)
 		if err := bucket.Delete(ctx); err != nil {
 			return fmt.Errorf("bucket.Delete: %v", err)
@@ -285,8 +285,8 @@ func (s *server) unsetup(ctx context.Context) error {
 			return fmt.Errorf("setBucketName: %v", err)
 		}
 	}
-	if s.instanceAccount != nil {
-		sAccount := *s.instanceAccount
+	if s.InstanceAccount != nil {
+		sAccount := *s.InstanceAccount
 		// Remove policy bindings for SA
 		policy, err := cloudresourcemanagerService.Projects.GetIamPolicy(projectID, &cloudresourcemanager.GetIamPolicyRequest{}).Do()
 		if err != nil {
@@ -347,7 +347,7 @@ func (s *server) Start(ctx context.Context) error {
 		}
 	}
 	// Check that instance is in a startable state
-	status, err := s.Status(ctx)
+	status, err := s.GetStatus(ctx)
 	if err != nil {
 		return fmt.Errorf("GetStatus: %v", err)
 	}
@@ -408,7 +408,7 @@ func (s *server) Start(ctx context.Context) error {
 		},
 		ServiceAccounts: []*compute.ServiceAccount{
 			{
-				Email:  *s.instanceAccount,
+				Email:  *s.InstanceAccount,
 				Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
 			},
 		},
@@ -458,7 +458,7 @@ func (s *server) Stop(ctx context.Context) error {
 
 func (s *server) Delete(ctx context.Context) error {
 	// Check status is in a deletable state
-	status, err := s.Status(ctx)
+	status, err := s.GetStatus(ctx)
 	if err != nil {
 		return fmt.Errorf("GetStatus: %v", err)
 	}
@@ -481,7 +481,7 @@ func (s *server) Delete(ctx context.Context) error {
 	return nil
 }
 
-func (s *server) Status(ctx context.Context) (ServerStatus, error) {
+func (s *server) GetStatus(ctx context.Context) (ServerStatus, error) {
 	instance, err := computeClient.Instances.Get(
 		projectID,
 		projectZone,
@@ -493,7 +493,7 @@ func (s *server) Status(ctx context.Context) (ServerStatus, error) {
 			if err := s.syncFromDB(ctx); err != nil {
 				return UNKNOWN, fmt.Errorf("syncFromDB: %v", err)
 			}
-			return s.status, nil
+			return s.Status, nil
 		}
 		return UNKNOWN, err
 	}
@@ -647,7 +647,7 @@ func (s *server) DnsName() string {
 }
 
 func (s *server) IsStopped(ctx context.Context) (bool, error) {
-	status, err := s.Status(ctx)
+	status, err := s.GetStatus(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -656,7 +656,7 @@ func (s *server) IsStopped(ctx context.Context) (bool, error) {
 }
 
 func (s *server) IsRunning(ctx context.Context) (bool, error) {
-	status, err := s.Status(ctx)
+	status, err := s.GetStatus(ctx)
 	if err != nil {
 		return false, err
 	}
