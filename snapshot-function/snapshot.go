@@ -243,7 +243,7 @@ func (s *server) getOldServerSnapshots(ctx context.Context) ([]*compute.Snapshot
 }
 
 func deleteSnapshot(ctx context.Context, snapshot *compute.Snapshot) error {
-	_, err := computeClient.Snapshots.Delete(projectID, fmt.Sprintf("global/snapshots/%s", snapshot.Name)).Context(ctx).Do()
+	_, err := computeClient.Snapshots.Delete(projectID, snapshot.Name).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("snapshots.Delete: %v", err)
 	}
