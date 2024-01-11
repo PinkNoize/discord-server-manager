@@ -186,10 +186,9 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 
 func waitForOperation(ctx context.Context, op *compute.Operation) (*compute.Operation, error) {
 	globalOperationsService := compute.NewGlobalOperationsService(computeClient)
-	globalOperationURL := op.Header.Get("Location")
 
 	for {
-		status, err := globalOperationsService.Wait(projectID, globalOperationURL).Do()
+		status, err := globalOperationsService.Wait(projectID, op.Name).Do()
 		if err != nil {
 			return nil, fmt.Errorf("error checking operation status: %w", err)
 		}
