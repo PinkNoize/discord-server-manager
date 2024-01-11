@@ -43,6 +43,9 @@ resource "google_cloudfunctions_function" "function" {
     content {
       event_type = var.event_type
       resource   = var.event_resource
+      failure_policy {
+        retry = var.retry_on_failure
+      }
     }
   }
   lifecycle {

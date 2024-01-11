@@ -362,4 +362,5 @@ module "snapshot_function" {
   service_account_email = google_service_account.snapshot_account.email
   event_type            = "google.pubsub.topic.publish"
   event_resource        = "${google_pubsub_topic.snapshot_topic.id}"
+  retry_on_failure      = true
 }

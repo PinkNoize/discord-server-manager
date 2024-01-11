@@ -21,6 +21,9 @@ variable "event_type" {
 variable "event_resource" {
     default = null
 }
+variable "retry_on_failure" {
+    default = false
+}
 variable "ingress_settings" {
     default = null
 }
