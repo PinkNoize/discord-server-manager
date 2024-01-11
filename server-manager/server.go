@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 
 	"cloud.google.com/go/firestore"
@@ -530,11 +531,14 @@ func (s *server) Delete(ctx context.Context) error {
 }
 
 func (s *server) getLatestSnapshot(ctx context.Context) (*string, error) {
-	snapshotRes, err := computeClient.Snapshots.List(projectID).Filter(fmt.Sprintf("labels.server=%s", generateServerTag(s.Name))).OrderBy("creationTimestamp desc").Do()
+	snapshotRes, err := computeClient.Snapshots.List(projectID).Filter(fmt.Sprintf("labels.server=%s", generateServerTag(s.Name))).Do()
 	if err != nil {
 		return nil, fmt.Errorf("snapshots.List: %v", err)
 	}
 	snapshots := snapshotRes.Items
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].CreationTimestamp > snapshots[j].CreationTimestamp
+	})
 	if len(snapshots) >= 1 {
 		snapshot_path := fmt.Sprintf("global/snapshots/%s", snapshots[0].Name)
 		return &snapshot_path, nil
