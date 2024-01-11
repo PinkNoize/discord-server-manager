@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/compute/v1"
@@ -176,6 +177,21 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 		if err != nil {
 			return fmt.Errorf("Failed to update server status: %v", err)
 		}
+		oldSnapshots, err := server.getOldServerSnapshots(ctx)
+		if err != nil {
+			return fmt.Errorf("getOldServerSnapshots: %v", err)
+		}
+		log.Print(LogEntry{
+			Message: fmt.Sprintf("Old snapshots found: %v", oldSnapshots),
+		})
+		for _, snap := range oldSnapshots {
+			if err = deleteSnapshot(ctx, snap); err != nil {
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("deleteSnapshot: %v", err),
+					Severity: "ERROR",
+				})
+			}
+		}
 		return nil
 	} else if server.Status == READY {
 		return nil
@@ -208,4 +224,28 @@ func waitForOperation(ctx context.Context, op *compute.Operation) (*compute.Oper
 			return nil, fmt.Errorf("unexpected operation status: %s", status.Status)
 		}
 	}
+}
+
+func (s *server) getOldServerSnapshots(ctx context.Context) ([]*compute.Snapshot, error) {
+	snapshotRes, err := computeClient.Snapshots.List(projectID).Filter(fmt.Sprintf("labels.server=%s", generateServerTag(s.Name))).Do()
+	if err != nil {
+		return nil, fmt.Errorf("snapshots.List: %v", err)
+	}
+	snapshots := snapshotRes.Items
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].CreationTimestamp > snapshots[j].CreationTimestamp
+	})
+	if len(snapshots) >= 1 {
+		return snapshots[1:], nil
+	} else {
+		return []*compute.Snapshot{}, nil
+	}
+}
+
+func deleteSnapshot(ctx context.Context, snapshot *compute.Snapshot) error {
+	_, err := computeClient.Snapshots.Delete(projectID, fmt.Sprintf("global/snapshots/%s", snapshot.Name)).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("snapshots.Delete: %v", err)
+	}
+	return nil
 }
