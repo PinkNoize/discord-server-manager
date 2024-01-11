@@ -542,8 +542,9 @@ func (s *server) getLatestSnapshot(ctx context.Context) (*string, error) {
 	if len(snapshots) >= 1 {
 		snapshot_path := fmt.Sprintf("global/snapshots/%s", snapshots[0].Name)
 		return &snapshot_path, nil
+	} else {
+		return nil, nil
 	}
-	return nil, fmt.Errorf("No snapshots found")
 }
 
 func (s *server) GetStatus(ctx context.Context) (ServerStatus, error) {
