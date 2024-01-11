@@ -1,0 +1,176 @@
+package snapshotfunction
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"cloud.google.com/go/firestore"
+	"google.golang.org/api/compute/v1"
+)
+
+// Globals
+var projectID string = os.Getenv("PROJECT_ID")
+var projectRegion string = os.Getenv("PROJECT_REGION")
+var projectZone string = os.Getenv("PROJECT_ZONE")
+
+var computeClient *compute.Service
+var firestoreClient *firestore.Client
+
+func init() {
+	var err error
+	ctx := context.Background()
+	computeClient, err = compute.NewService(ctx)
+	if err != nil {
+		log.Fatalf("Failed to create compute client: %v", err)
+	}
+	firestoreClient, err = firestore.NewClient(ctx, projectID)
+	if err != nil {
+		log.Fatalf("Failed to create firestore client: %v", err)
+	}
+}
+
+type PubSubMessage struct {
+	Data []byte `json:"data"`
+}
+
+type SnapshotInfoPubSub struct {
+	Name string `json:"name"`
+	Disk string `json:"disk"`
+}
+
+type ServerStatus string
+
+const (
+	// Internal statuses
+	NEW        = "NEW"
+	READY      = "READY"
+	STARTINGUP = "STARTINGUP"
+	SAVING     = "SAVING"
+	// GCP statuses
+	DEPROVISIONING = "DEPROVISIONING"
+	PROVISIONING   = "PROVISIONING"
+	REPAIRING      = "REPAIRING"
+	RUNNING        = "RUNNING"
+	STAGING        = "STAGING"
+	STOPPED        = "STOPPED"
+	STOPPING       = "STOPPING"
+	SUSPENDED      = "SUSPENDED"
+	TERMINATED     = "TERMINATED"
+	UNKNOWN        = "UNKNOWN"
+)
+
+type LogEntry struct {
+	Message  string `json:"message"`
+	Severity string `json:"severity,omitempty"`
+}
+
+// String renders an entry structure to the JSON format expected by Cloud Logging.
+func (e LogEntry) String() string {
+	if e.Severity == "" {
+		e.Severity = "INFO"
+	}
+	out, err := json.Marshal(e)
+	if err != nil {
+		log.Printf("json.Marshal: %v", err)
+	}
+	return string(out)
+}
+
+type server struct {
+	// User configurable
+	Name string
+	// Backend
+	Status ServerStatus `firestore:"status"`
+}
+
+func generateServerTag(name string) string {
+	return fmt.Sprintf("server-%v", name)
+}
+
+func ServerFromName(ctx context.Context, name string) (*server, error) {
+	serverDoc, err := firestoreClient.Collection("Servers").Doc(name).Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Doc %v: %v", name, err)
+	}
+	if !serverDoc.Exists() {
+		return nil, fmt.Errorf("server %v does not exist", name)
+	}
+	server := server{}
+	err = serverDoc.DataTo(&server)
+	server.Name = name
+	if err != nil {
+		return nil, err
+	}
+	return &server, nil
+}
+
+// Entry
+func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
+	var snapshotInfo SnapshotInfoPubSub
+	if err := json.Unmarshal([]byte(m.Data), &snapshotInfo); err != nil {
+		log.Fatalf("Failed to unmarshal snapshotInfo: %v", err)
+	}
+	serverName := snapshotInfo.Name
+	disk := snapshotInfo.Disk
+	_, diskName := filepath.Split(disk)
+	serverDocRef := firestoreClient.Collection("Servers").Doc(serverName)
+
+	diskInfo, err := computeClient.Disks.Get(projectID, projectZone, diskName).Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("Failed to find disk: %v", err)
+	}
+	if len(diskInfo.Users) != 0 {
+		return fmt.Errorf("Disk %v still has attachments: %v", diskName, diskInfo.Users)
+	}
+
+	server, err := ServerFromName(ctx, serverName)
+	if err != nil {
+		return fmt.Errorf("serverFromName: %v", err)
+	}
+	log.Print(LogEntry{
+		Message: fmt.Sprintf("Server %v has status %v", serverName, server.Status),
+	})
+
+	if server.Status == SAVING {
+		// Snapshot disk
+		snapshot, err := computeClient.Snapshots.Insert(projectID, &compute.Snapshot{
+			Name:        fmt.Sprintf("%v-%x", serverName, diskInfo.Id),
+			Description: fmt.Sprintf("Snapshot of %x", diskInfo.Id),
+			SourceDisk:  disk,
+			Labels: map[string]string{
+				"server": generateServerTag(serverName),
+			},
+		}).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("Failed to create snapshot for %v %x", serverName, diskInfo.Id)
+		}
+		snapshot_path := fmt.Sprintf("global/snapshots/%s", snapshot.Name)
+		log.Print(LogEntry{
+			Message: fmt.Sprintf("Created snapshot %v", snapshot_path),
+		})
+		// Delete disk
+		_, err = computeClient.Disks.Delete(projectID, projectZone, diskInfo.Name).Context(ctx).Do()
+		if err != nil {
+			return fmt.Errorf("disks.Delete: %v", err)
+		}
+		// Update status
+		_, err = serverDocRef.Update(ctx, []firestore.Update{
+			{
+				Path:  "status",
+				Value: READY,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("Failed to update server status: %v", err)
+		}
+		return nil
+	} else if server.Status == READY {
+		return nil
+	} else {
+		return fmt.Errorf("Server not in processable status: %v", server.Status)
+	}
+}

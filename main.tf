@@ -27,10 +27,6 @@ provider "google" {
 
 data "google_project" "project" {}
 
-resource "google_pubsub_topic" "command_topic" {
-  name = "command-topic"
-}
-
 #Enable Compute API
 resource "google_project_service" "comp" {
   project = var.project
@@ -124,6 +120,10 @@ resource "random_id" "id" {
 	  byte_length = 8
 }
 
+resource "google_pubsub_topic" "command_topic" {
+  name = "command-topic"
+}
+
 resource "google_project_iam_custom_role" "command_func_svc_create_role" {
   role_id     = "cmdfunc_svc_create_${random_id.id.hex}"
   title       = "Command Func Role"
@@ -198,6 +198,7 @@ module "command_function" {
     "DNS_PROJECT_ID"    = var.dns_project_id
     "DNS_MANAGED_ZONE"  = var.dns_managed_zone
     "BASE_DOMAIN"       = var.base_domain
+    "SNAPSHOT_TOPIC"    = google_pubsub_topic.snapshot_topic.name
     "DISCORD_APPID"     = var.discord_app_id
     "DISCORD_SECRET_ID" = google_secret_manager_secret.secret-basic.id
   }
@@ -319,4 +320,46 @@ module "discord_deploy_function" {
   service_account_email = google_service_account.discord_deploy_service_account.email
   trigger_http          = true
   ingress_settings      = "ALLOW_INTERNAL_ONLY"
+}
+
+# Snapshot Cloud Function
+
+resource "google_pubsub_topic" "snapshot_topic" {
+  name = "snapshot-topic"
+}
+
+resource "google_service_account" "snapshot_account" {
+  account_id   = "snapshot-func-service-acc"
+  display_name = "Snapshot Function Account"
+}
+
+resource "google_project_iam_member" "snapshot-firestore-iam" {
+  project = var.project
+  role    = "roles/datastore.user"
+  member = "serviceAccount:${google_service_account.snapshot_account.email}"
+}
+
+resource "google_project_iam_member" "snapshot-compute-iam" {
+  project = var.project
+  role    = "roles/compute.admin"
+  member  = "serviceAccount:${google_service_account.snapshot_account.email}"
+}
+
+module "snapshot_function" {
+  source                = "./modules/function"
+  project               = var.project
+  region                = var.region
+  function_name         = "snapshot-function"
+  function_entry_point  = "SnapshotPubSub"
+  environment_variables = {
+    "PROJECT_ID"        = var.project
+    "PROJECT_REGION"    = var.region
+    "PROJECT_ZONE"      = var.zone
+  }
+  repository            = var.repository
+  branch                = "main"
+  source_dir            = "snapshot-function"
+  service_account_email = google_service_account.snapshot_account.email
+  event_type            = "google.pubsub.topic.publish"
+  event_resource        = "${google_pubsub_topic.snapshot_topic.id}"
 }

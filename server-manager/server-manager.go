@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/storage"
 	"github.com/bwmarrin/discordgo"
 	"google.golang.org/api/cloudresourcemanager/v1"
@@ -22,6 +23,11 @@ import (
 	iam "google.golang.org/api/iam/v1"
 )
 
+type LogEntry struct {
+	Message  string `json:"message"`
+	Severity string `json:"severity,omitempty"`
+}
+
 // Globals
 var projectID string = os.Getenv("PROJECT_ID")
 var projectRegion string = os.Getenv("PROJECT_REGION")
@@ -29,6 +35,7 @@ var projectZone string = os.Getenv("PROJECT_ZONE")
 var dnsProjectID string = os.Getenv("DNS_PROJECT_ID")
 var dnsZone string = os.Getenv("DNS_MANAGED_ZONE")
 var baseDomain string = os.Getenv("BASE_DOMAIN")
+var snapshotTopicID string = os.Getenv("SNAPSHOT_TOPIC")
 var discordAppID string = os.Getenv("DISCORD_APPID")
 var discordSecretID string = os.Getenv("DISCORD_SECRET_ID")
 var discordAPIToken string
@@ -42,6 +49,7 @@ var dnsClient *dns.Service
 var rrClient *dns.ResourceRecordSetsService
 var discordSession *discordgo.Session
 var httpClient http.Client = http.Client{Timeout: time.Second * 5}
+var snapshotTopic *pubsub.Topic
 
 var initDiscordSession sync.Once
 
@@ -73,6 +81,15 @@ func init() {
 		log.Fatalf("Failed to create dns client: %v", err)
 	}
 	rrClient = dns.NewResourceRecordSetsService(dnsClient)
+
+	pubsubClient, err := pubsub.NewClient(ctx, projectID)
+	if err != nil {
+		log.Fatal(LogEntry{
+			Message:  fmt.Sprintf("Failed to create pubsub client: %v", err),
+			Severity: "CRITICAL",
+		})
+	}
+	snapshotTopic = pubsubClient.Topic(snapshotTopicID)
 }
 
 func initDiscord(ctx context.Context) {

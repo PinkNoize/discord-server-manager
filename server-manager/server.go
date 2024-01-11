@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/base32"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
 	"cloud.google.com/go/firestore"
-	"cloud.google.com/go/storage"
+	"cloud.google.com/go/pubsub"
 	"github.com/sony/sonyflake"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/compute/v1"
@@ -21,26 +22,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type ServerStatus int
+type ServerStatus string
 
-// Editing these between deployments can cause confusion
 const (
 	// Internal statuses
-	NEW = iota
-	READY
-	STARTINGUP
-	SAVING
+	NEW        = "NEW"
+	READY      = "READY"
+	STARTINGUP = "STARTINGUP"
+	SAVING     = "SAVING"
 	// GCP statuses
-	DEPROVISIONING
-	PROVISIONING
-	REPAIRING
-	RUNNING
-	STAGING
-	STOPPED
-	STOPPING
-	SUSPENDED
-	TERMINATED
-	UNKNOWN
+	DEPROVISIONING = "DEPROVISIONING"
+	PROVISIONING   = "PROVISIONING"
+	REPAIRING      = "REPAIRING"
+	RUNNING        = "RUNNING"
+	STAGING        = "STAGING"
+	STOPPED        = "STOPPED"
+	STOPPING       = "STOPPING"
+	SUSPENDED      = "SUSPENDED"
+	TERMINATED     = "TERMINATED"
+	UNKNOWN        = "UNKNOWN"
 )
 
 func (ss ServerStatus) String() string {
@@ -87,7 +87,6 @@ type server struct {
 	DiskSizeGB  int64    `firestore:"diskSizeGB"`
 	// Backend
 	InstanceAccount *string      `firestore:"instanceAccount"`
-	Bucket          *string      `firestore:"bucket"`
 	Status          ServerStatus `firestore:"status"`
 }
 
@@ -102,7 +101,6 @@ func CreateServer(ctx context.Context, name, subdomain, machineType, purpose, os
 		Ports:           ports,
 		DiskSizeGB:      diskSize,
 		InstanceAccount: nil,
-		Bucket:          nil,
 		Status:          NEW,
 	}
 	// TODO: Add validation for input fields
@@ -168,18 +166,18 @@ func (s *server) updateDBfield(ctx context.Context, field string, value interfac
 	return nil
 }
 
-func (s *server) setBucketName(ctx context.Context, bucket *string) error {
-	var new_v interface{} = firestore.Delete
-	if bucket != nil {
-		new_v = *bucket
-	}
-	err := s.updateDBfield(ctx, "bucket", new_v)
-	if err != nil {
-		return fmt.Errorf("updateDBfield: %v", err)
-	}
-	s.Bucket = bucket
-	return nil
-}
+// func (s *server) setBucketName(ctx context.Context, bucket *string) error {
+// 	var new_v interface{} = firestore.Delete
+// 	if bucket != nil {
+// 		new_v = *bucket
+// 	}
+// 	err := s.updateDBfield(ctx, "bucket", new_v)
+// 	if err != nil {
+// 		return fmt.Errorf("updateDBfield: %v", err)
+// 	}
+// 	s.Bucket = bucket
+// 	return nil
+// }
 
 func (s *server) setInstanceAccount(ctx context.Context, account *string) error {
 	var new_v interface{} = firestore.Delete
@@ -204,40 +202,40 @@ func (s *server) setStatus(ctx context.Context, status ServerStatus) error {
 }
 
 func (s *server) isSetup() bool {
-	return s.Bucket != nil && s.InstanceAccount != nil
+	return s.InstanceAccount != nil
 }
 
 func (s *server) setup(ctx context.Context) error {
-	if s.Bucket == nil {
-		// Create bucket
-		flake := sonyflake.NewSonyflake(sonyflake.Settings{
-			MachineID: func() (uint16, error) { return 0x6969, nil },
-		})
-		flakeID, err := flake.NextID()
-		if err != nil {
-			return fmt.Errorf("flake.NextID: %v", err)
-		}
-		flakeIDbyte := make([]byte, 8)
-		binary.BigEndian.PutUint64(flakeIDbyte, flakeID)
-		id := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(flakeIDbyte))
-		bucketName := fmt.Sprintf("%v-storage-%v", s.Name, id)
-		bucket := storageClient.Bucket(bucketName)
-		attrs := storage.BucketAttrs{
-			Location:     projectRegion,
-			LocationType: "region",
-			Labels: map[string]string{
-				"server": generateServerTag(s.Name),
-			},
-		}
-		if err := bucket.Create(ctx, projectID, &attrs); err != nil {
-			return fmt.Errorf("bucket.Create: %v", err)
-		}
-		log.Printf("Bucket created successfully: %v", bucketName)
-		err = s.setBucketName(ctx, &bucketName)
-		if err != nil {
-			return fmt.Errorf("setBucketName: %v", err)
-		}
-	}
+	// if s.Bucket == nil {
+	// 	// Create bucket
+	// 	flake := sonyflake.NewSonyflake(sonyflake.Settings{
+	// 		MachineID: func() (uint16, error) { return 0x6969, nil },
+	// 	})
+	// 	flakeID, err := flake.NextID()
+	// 	if err != nil {
+	// 		return fmt.Errorf("flake.NextID: %v", err)
+	// 	}
+	// 	flakeIDbyte := make([]byte, 8)
+	// 	binary.BigEndian.PutUint64(flakeIDbyte, flakeID)
+	// 	id := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(flakeIDbyte))
+	// 	bucketName := fmt.Sprintf("%v-storage-%v", s.Name, id)
+	// 	bucket := storageClient.Bucket(bucketName)
+	// 	attrs := storage.BucketAttrs{
+	// 		Location:     projectRegion,
+	// 		LocationType: "region",
+	// 		Labels: map[string]string{
+	// 			"server": generateServerTag(s.Name),
+	// 		},
+	// 	}
+	// 	if err := bucket.Create(ctx, projectID, &attrs); err != nil {
+	// 		return fmt.Errorf("bucket.Create: %v", err)
+	// 	}
+	// 	log.Printf("Bucket created successfully: %v", bucketName)
+	// 	err = s.setBucketName(ctx, &bucketName)
+	// 	if err != nil {
+	// 		return fmt.Errorf("setBucketName: %v", err)
+	// 	}
+	// }
 	if s.InstanceAccount == nil {
 		// Create service account
 		createRequest := &iam.CreateServiceAccountRequest{
@@ -282,17 +280,17 @@ func (s *server) setup(ctx context.Context) error {
 }
 
 func (s *server) unsetup(ctx context.Context) error {
-	if s.Bucket != nil {
-		bucketName := s.Bucket
-		bucket := storageClient.Bucket(*bucketName)
-		if err := bucket.Delete(ctx); err != nil {
-			return fmt.Errorf("bucket.Delete: %v", err)
-		}
-		log.Printf("Bucket deleted successfully: %v", bucketName)
-		if err := s.setBucketName(ctx, nil); err != nil {
-			return fmt.Errorf("setBucketName: %v", err)
-		}
-	}
+	// if s.Bucket != nil {
+	// 	bucketName := s.Bucket
+	// 	bucket := storageClient.Bucket(*bucketName)
+	// 	if err := bucket.Delete(ctx); err != nil {
+	// 		return fmt.Errorf("bucket.Delete: %v", err)
+	// 	}
+	// 	log.Printf("Bucket deleted successfully: %v", bucketName)
+	// 	if err := s.setBucketName(ctx, nil); err != nil {
+	// 		return fmt.Errorf("setBucketName: %v", err)
+	// 	}
+	// }
 	if s.InstanceAccount != nil {
 		sAccount := *s.InstanceAccount
 		// Remove policy bindings for SA
@@ -367,10 +365,28 @@ func (s *server) Start(ctx context.Context) error {
 		return fmt.Errorf("server not in a startable state: %v", status)
 	}
 
-	// Get instance config
-	sourceImage, err := s.getInstanceBaseImage(ctx)
+	// Configure disk attributes
+	diskParams := compute.AttachedDiskInitializeParams{
+		DiskType: fmt.Sprintf("zones/%v/diskTypes/pd-standard", projectZone),
+		Labels: map[string]string{
+			"server": generateServerTag(s.Name),
+		},
+	}
+
+	snapshot, err := s.getLatestSnapshot(ctx)
 	if err != nil {
-		return fmt.Errorf("getInstanceBaseImage: %v", err)
+		return fmt.Errorf("getLatestSnapshot: %v", err)
+	}
+	// Check if previous snapshot exists
+	if snapshot != nil {
+		diskParams.SourceSnapshot = *snapshot
+	} else {
+		// Get instance config
+		sourceImage, err := s.getInstanceBaseImage(ctx)
+		if err != nil {
+			return fmt.Errorf("getInstanceBaseImage: %v", err)
+		}
+		diskParams.SourceImage = sourceImage
 	}
 
 	startupScript := "#!/bin/bash\n/startup.sh"
@@ -380,12 +396,10 @@ func (s *server) Start(ctx context.Context) error {
 		MachineType: fmt.Sprintf("zones/%s/machineTypes/%s", projectZone, s.MachineType),
 		Disks: []*compute.AttachedDisk{
 			{
-				Boot:       true,
-				AutoDelete: true,
-				InitializeParams: &compute.AttachedDiskInitializeParams{
-					SourceImage: sourceImage,
-					DiskType:    fmt.Sprintf("zones/%v/diskTypes/pd-standard", projectZone),
-				},
+				Boot:             true,
+				AutoDelete:       false,
+				InitializeParams: &diskParams,
+				DiskSizeGb:       s.DiskSizeGB,
 			},
 		},
 		NetworkInterfaces: []*compute.NetworkInterface{
@@ -441,7 +455,6 @@ func (s *server) Start(ctx context.Context) error {
 	if err := s.setStatus(ctx, STARTINGUP); err != nil {
 		return fmt.Errorf("setStatus: %v", err)
 	}
-	// TODO: Create volume and attach it
 	// Update server status
 	if err := s.setStatus(ctx, RUNNING); err != nil {
 		return fmt.Errorf("setStatus: %v", err)
@@ -450,19 +463,44 @@ func (s *server) Start(ctx context.Context) error {
 }
 
 func (s *server) Stop(ctx context.Context) error {
-	_, err := computeClient.Instances.Delete(
+	// Get instance disks
+	disk, err := computeClient.Disks.Get(projectID, projectZone, s.Name).Do()
+	if err != nil {
+		return fmt.Errorf("instances.Get: %v", err)
+	}
+	// Push instance disk to topic for snapshot
+	log.Printf("Found disk %v on instance %v", disk.Name, s.Name)
+	pubSubData, err := json.Marshal(map[string]string{
+		"name": s.Name,
+		"disk": disk.SelfLink,
+	})
+	if err != nil {
+		return fmt.Errorf("jsonMarshal: %v", err)
+	}
+	result := snapshotTopic.Publish(ctx, &pubsub.Message{
+		Data: pubSubData,
+	})
+	// Update status to saving
+	if err := s.setStatus(ctx, SAVING); err != nil {
+		return fmt.Errorf("setStatus: %v", err)
+	}
+
+	// Finish publish
+	_, err = result.Get(ctx)
+	if err != nil {
+		return fmt.Errorf("Pubsub.Publish: %v", err)
+	}
+
+	// Delete Instance
+	_, err = computeClient.Instances.Delete(
 		projectID,
 		projectZone,
 		s.Name,
 	).Context(ctx).Do()
 	if err != nil {
-		return err
+		return fmt.Errorf("instances.Delete: %v", err)
 	}
-	log.Printf("Server %v stopped", s.Name)
-	// TODO: Update status to saving
-	if err := s.setStatus(ctx, READY); err != nil {
-		return fmt.Errorf("setStatus: %v", err)
-	}
+	log.Printf("Server %v stopping", s.Name)
 	return nil
 }
 
@@ -489,6 +527,19 @@ func (s *server) Delete(ctx context.Context) error {
 	log.Printf("Doc %v deleted in Collection Servers", s.Name)
 
 	return nil
+}
+
+func (s *server) getLatestSnapshot(ctx context.Context) (*string, error) {
+	snapshotRes, err := computeClient.Snapshots.List(projectID).Filter(fmt.Sprintf("labels.server=%s", generateServerTag(s.Name))).OrderBy("creationTimestamp desc").Do()
+	if err != nil {
+		return nil, fmt.Errorf("snapshots.List: %v", err)
+	}
+	snapshots := snapshotRes.Items
+	if len(snapshots) >= 1 {
+		snapshot_path := fmt.Sprintf("global/snapshots/%s", snapshots[0].Name)
+		return &snapshot_path, nil
+	}
+	return nil, fmt.Errorf("No snapshots found")
 }
 
 func (s *server) GetStatus(ctx context.Context) (ServerStatus, error) {
