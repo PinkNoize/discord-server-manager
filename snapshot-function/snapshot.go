@@ -148,6 +148,15 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 		if err != nil {
 			return fmt.Errorf("Failed to create snapshot for %v %x", serverName, diskInfo.Id)
 		}
+		log.Println("Snapshot creation operation started. Waiting for completion...")
+
+		snapshot, err = waitForOperation(ctx, snapshot)
+		if err != nil {
+			return fmt.Errorf("waitForOperation: %v", err)
+		}
+
+		log.Println("Snapshot creation successful!")
+
 		snapshot_path := fmt.Sprintf("global/snapshots/%s", snapshot.Name)
 		log.Print(LogEntry{
 			Message: fmt.Sprintf("Created snapshot %v", snapshot_path),
@@ -172,5 +181,32 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 		return nil
 	} else {
 		return fmt.Errorf("Server not in processable status: %v", server.Status)
+	}
+}
+
+func waitForOperation(ctx context.Context, op *compute.Operation) (*compute.Operation, error) {
+	globalOperationsService := compute.NewGlobalOperationsService(computeClient)
+	globalOperationURL := op.Header.Get("Location")
+
+	for {
+		status, err := globalOperationsService.Wait(projectID, globalOperationURL).Do()
+		if err != nil {
+			return nil, fmt.Errorf("error checking operation status: %w", err)
+		}
+
+		switch status.Status {
+		case "DONE":
+			if status.Error != nil {
+				return nil, fmt.Errorf("operation completed with error: %v", status.Error)
+			}
+			return status, nil // Operation completed successfully
+		case "PENDING", "RUNNING":
+			log.Print(LogEntry{
+				Message: fmt.Sprintf("Operation still in progress: %v", status.StatusMessage),
+			})
+			continue
+		default:
+			return nil, fmt.Errorf("unexpected operation status: %s", status.Status)
+		}
 	}
 }
