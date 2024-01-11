@@ -185,6 +185,14 @@ resource "google_project_iam_binding" "dns-iam" {
   members  = ["serviceAccount:${google_service_account.service_account.email}"]
 }
 
+# Add pub/sub publisher
+resource "google_pubsub_topic_iam_member" "command-member" {
+  project = google_pubsub_topic.snapshot_topic.project
+  topic = google_pubsub_topic.snapshot_topic.name
+  role = "roles/pubsub.publisher"
+  member = "serviceAccount:${google_service_account.service_account.email}"
+}
+
 module "command_function" {
   source                = "./modules/function"
   project               = var.project
