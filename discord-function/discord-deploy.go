@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	minDiskSize = 1.0
+	minDiskSize = 10.0
 	commands    = []*discordgo.ApplicationCommand{
 		{
 			Name:        "server",

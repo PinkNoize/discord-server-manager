@@ -122,10 +122,10 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 
 	diskInfo, err := computeClient.Disks.Get(projectID, projectZone, diskName).Context(ctx).Do()
 	if err != nil {
-		return fmt.Errorf("Failed to find disk: %v", err)
+		return fmt.Errorf("failed to find disk: %v", err)
 	}
 	if len(diskInfo.Users) != 0 {
-		return fmt.Errorf("Disk %v still has attachments: %v", diskName, diskInfo.Users)
+		return fmt.Errorf("disk %v still has attachments: %v", diskName, diskInfo.Users)
 	}
 
 	server, err := ServerFromName(ctx, serverName)
@@ -142,12 +142,15 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 			Name:        fmt.Sprintf("%v-%x", serverName, diskInfo.Id),
 			Description: fmt.Sprintf("Snapshot of %x", diskInfo.Id),
 			SourceDisk:  disk,
+			StorageLocations: []string{
+				projectZone,
+			},
 			Labels: map[string]string{
 				"server": generateServerTag(serverName),
 			},
 		}).Context(ctx).Do()
 		if err != nil {
-			return fmt.Errorf("Failed to create snapshot for %v %x", serverName, diskInfo.Id)
+			return fmt.Errorf("failed to create snapshot for %v %x", serverName, diskInfo.Id)
 		}
 		log.Println("Snapshot creation operation started. Waiting for completion...")
 
@@ -175,16 +178,19 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 			},
 		})
 		if err != nil {
-			return fmt.Errorf("Failed to update server status: %v", err)
+			return fmt.Errorf("failed to update server status: %v", err)
 		}
 		oldSnapshots, err := server.getOldServerSnapshots(ctx)
 		if err != nil {
 			return fmt.Errorf("getOldServerSnapshots: %v", err)
 		}
 		log.Print(LogEntry{
-			Message: fmt.Sprintf("Old snapshots found: %v", oldSnapshots),
+			Message: "Old snapshots found:",
 		})
 		for _, snap := range oldSnapshots {
+			log.Print(LogEntry{
+				Message: fmt.Sprintf("Deleting %v", snap.Name),
+			})
 			if err = deleteSnapshot(ctx, snap); err != nil {
 				log.Print(LogEntry{
 					Message:  fmt.Sprintf("deleteSnapshot: %v", err),
@@ -196,7 +202,7 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 	} else if server.Status == READY {
 		return nil
 	} else {
-		return fmt.Errorf("Server not in processable status: %v", server.Status)
+		return fmt.Errorf("server not in processable status: %v", server.Status)
 	}
 }
 
