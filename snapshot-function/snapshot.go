@@ -152,7 +152,7 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 			Description: fmt.Sprintf("Snapshot of %x", diskInfo.Id),
 			SourceDisk:  disk,
 			StorageLocations: []string{
-				projectZone,
+				projectRegion,
 			},
 			Labels: map[string]string{
 				"server": generateServerTag(serverName),
