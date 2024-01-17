@@ -159,7 +159,7 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 			},
 		}).Context(ctx).Do()
 		if err != nil {
-			return fmt.Errorf("failed to create snapshot for %v %x", serverName, diskInfo.Id)
+			return fmt.Errorf("failed to create snapshot for %v %x: %v", serverName, diskInfo.Id, err)
 		}
 		log.Println("Snapshot creation operation started. Waiting for completion...")
 
