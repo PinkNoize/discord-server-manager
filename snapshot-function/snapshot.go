@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/compute/v1"
+	"google.golang.org/api/googleapi"
 )
 
 // Globals
@@ -122,7 +124,14 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 
 	diskInfo, err := computeClient.Disks.Get(projectID, projectZone, diskName).Context(ctx).Do()
 	if err != nil {
-		return fmt.Errorf("failed to find disk: %v", err)
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == http.StatusNotFound {
+			log.Print(LogEntry{
+				Message: fmt.Sprintf("Disk not found: %v. Returning successfully", diskName),
+			})
+			return nil
+		} else {
+			return fmt.Errorf("failed to get disk: %v", err)
+		}
 	}
 	if len(diskInfo.Users) != 0 {
 		return fmt.Errorf("disk %v still has attachments: %v", diskName, diskInfo.Users)
