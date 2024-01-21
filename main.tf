@@ -359,6 +359,7 @@ module "snapshot_function" {
   region                = var.region
   function_name         = "snapshot-function"
   function_entry_point  = "SnapshotPubSub"
+  timeout = 540
   environment_variables = {
     "PROJECT_ID"        = var.project
     "PROJECT_REGION"    = var.region

@@ -27,3 +27,6 @@ variable "retry_on_failure" {
 variable "ingress_settings" {
     default = null
 }
+variable "timeout" {
+    default = 60
+}
