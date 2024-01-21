@@ -194,7 +194,7 @@ func SnapshotPubSub(ctx context.Context, m PubSubMessage) error {
 			return fmt.Errorf("getOldServerSnapshots: %v", err)
 		}
 		log.Print(LogEntry{
-			Message: "Old snapshots found:",
+			Message: fmt.Sprintf("Old snapshots found: %v", len(oldSnapshots)),
 		})
 		for _, snap := range oldSnapshots {
 			log.Print(LogEntry{

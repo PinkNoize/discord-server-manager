@@ -158,6 +158,50 @@ var (
 			},
 		},
 		{
+			Name:        "sshkey",
+			Description: "Modify ssh keys",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "add",
+					Description: "Adds an sshkey",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "name",
+							Description: "Name of the server",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "sshkey",
+							Description: "ssh key",
+							Required:    true,
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "user",
+							Description: "user (lowercase, no root)",
+							Required:    true,
+						},
+					},
+				},
+				{
+					Name:        "clear",
+					Description: "Clears ssh keys for a server",
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionString,
+							Name:        "name",
+							Description: "Name of the server",
+							Required:    true,
+						},
+					},
+				},
+			},
+		},
+		{
 			Name:        "user",
 			Description: "View/Modify user permissions",
 			Options: []*discordgo.ApplicationCommandOption{

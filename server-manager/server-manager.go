@@ -155,6 +155,16 @@ type statusArgs struct {
 	Servers *string `json:"servers"`
 }
 
+type addSSHKeyArgs struct {
+	Name   *string `json:"name"`
+	User   *string `json:"user"`
+	SSHKey *string `json:"sshkey"`
+}
+
+type clearSSHKeyArgs struct {
+	Name *string `json:"name"`
+}
+
 func SendDiscordInteractionResponse(token string, response *discordgo.WebhookParams) error {
 	log.Print("Sending Interaction response")
 	_, err := discordSession.FollowupMessageCreate(
@@ -333,6 +343,51 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 		}
 		response.Content = ""
 		response.Embeds = embeds
+	case "addsshkey":
+		args := addSSHKeyArgs{}
+		err := json.Unmarshal(m.Attributes, &args)
+		if err != nil {
+			response.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
+			return fmt.Errorf("error parsing addSSHKeyArgs: %v", err)
+		}
+		err = commandAddSSHKeyIP(ctx, &args)
+		if err != nil {
+			response.Content = fmt.Sprintf(
+				"Failed to add SSH key: %v",
+				err,
+			)
+			return fmt.Errorf("AddSSHKey failed: %v", err)
+		}
+		response.Content = fmt.Sprintf(
+			"Added sshkey %v to %v.",
+			args.SSHKey,
+			args.Name,
+		)
+	case "clearsshkeys":
+		args := clearSSHKeyArgs{}
+		err := json.Unmarshal(m.Attributes, &args)
+		if err != nil {
+			response.Content = fmt.Sprintf(
+				"Invalid args to command: %v",
+				command,
+			)
+			return fmt.Errorf("error parsing clearSSHKeyArgs: %v", err)
+		}
+		err = commandClearSSHKey(ctx, &args)
+		if err != nil {
+			response.Content = fmt.Sprintf(
+				"Failed to clear sshkey: %v",
+				err,
+			)
+			return fmt.Errorf("clearsshkey failed: %v", err)
+		}
+		response.Content = fmt.Sprintf(
+			"SSH keys cleared for server %v",
+			*args.Name,
+		)
 	default:
 		response.Content = fmt.Sprintf(
 			"Command not recognized: %v",
@@ -542,4 +597,43 @@ func commandStatus(ctx context.Context, args *statusArgs) ([]*discordgo.MessageE
 		}
 	}
 	return embeds, nil
+}
+
+func commandAddSSHKeyIP(ctx context.Context, args *addSSHKeyArgs) error {
+	if args.Name == nil {
+		return fmt.Errorf("name not specified")
+	}
+	if args.SSHKey == nil {
+		return fmt.Errorf("sshkey not specified")
+	}
+	if args.User == nil {
+		return fmt.Errorf("user not specified")
+	}
+	server, err := ServerFromName(ctx, *args.Name)
+	if err != nil {
+		return fmt.Errorf("serverFromName failed: %v", err)
+	}
+	log.Print(LogEntry{
+		Message: fmt.Sprintf("Adding sshkey %s to %s as %s", *args.SSHKey, *args.Name, *args.User),
+	})
+	err = server.AddSSHKey(ctx, *args.User, *args.SSHKey)
+	if err != nil {
+		return fmt.Errorf("failed AddSSHkey: %v", err)
+	}
+	return nil
+}
+
+func commandClearSSHKey(ctx context.Context, args *clearSSHKeyArgs) error {
+	if args.Name == nil {
+		return fmt.Errorf("name not specified")
+	}
+	server, err := ServerFromName(ctx, *args.Name)
+	if err != nil {
+		return fmt.Errorf("serverFromName failed: %v", err)
+	}
+	err = server.ClearSSHKeys(ctx)
+	if err != nil {
+		return fmt.Errorf("clearSSHKeys: %v", err)
+	}
+	return nil
 }

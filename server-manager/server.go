@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -86,6 +87,7 @@ type server struct {
 	OSFamily    string   `firestore:"osFamily"`
 	Ports       []uint16 `firestore:"ports"`
 	DiskSizeGB  int64    `firestore:"diskSizeGB"`
+	SSHKeys     []string `firestore:"sshkeys"`
 	// Backend
 	InstanceAccount *string      `firestore:"instanceAccount"`
 	Status          ServerStatus `firestore:"status"`
@@ -348,6 +350,39 @@ func (s *server) getInstanceBaseImage(ctx context.Context) (string, error) {
 	return sourceImage, nil
 }
 
+func (s *server) AddSSHKey(ctx context.Context, user, sshkey string) error {
+	valid, err := regexp.MatchString(`^[a-z]+[a-z0-9]+$`, user)
+	if err != nil {
+		return fmt.Errorf("matchString: %v", err)
+	}
+	if !valid || user == "root" {
+		return fmt.Errorf("invalid user: %v", user)
+	}
+	status, err := s.GetStatus(ctx)
+	if err != nil {
+		return fmt.Errorf("GetStatus: %v", err)
+	}
+	switch status {
+	case NEW, READY, STARTINGUP, SAVING:
+		// TODO: Add to running instance
+	}
+	err = s.updateDBfield(ctx, "sshkeys", firestore.ArrayUnion(sshkey))
+	if err != nil {
+		return fmt.Errorf("updateDBfield: %v", err)
+	}
+	s.SSHKeys = append(s.SSHKeys, sshkey)
+	return nil
+}
+
+func (s *server) ClearSSHKeys(ctx context.Context) error {
+	err := s.updateDBfield(ctx, "sshkeys", []string{})
+	if err != nil {
+		return fmt.Errorf("updateDBfield: %v", err)
+	}
+	s.SSHKeys = []string{}
+	return nil
+}
+
 func (s *server) Start(ctx context.Context) error {
 	if !s.isSetup() {
 		err := s.setup(ctx)
@@ -390,6 +425,8 @@ func (s *server) Start(ctx context.Context) error {
 		diskParams.SourceImage = sourceImage
 	}
 
+	sshkeys := s.GetSSHKeys()
+
 	startupScript := "#!/bin/bash\n/startup.sh"
 	shutdownScript := "#!/bin/bash\n/shutdown.sh"
 	instanceConfig := compute.Instance{
@@ -428,6 +465,10 @@ func (s *server) Start(ctx context.Context) error {
 				{
 					Key:   "shutdown-script",
 					Value: &shutdownScript,
+				},
+				{
+					Key:   "ssh-keys",
+					Value: &sshkeys,
 				},
 			},
 		},
@@ -545,6 +586,10 @@ func (s *server) getLatestSnapshot(ctx context.Context) (*string, error) {
 	} else {
 		return nil, nil
 	}
+}
+
+func (s *server) GetSSHKeys() string {
+	return strings.Join(s.SSHKeys, "\n")
 }
 
 func (s *server) GetStatus(ctx context.Context) (ServerStatus, error) {

@@ -357,6 +357,16 @@ func handleApplicationCommand(ctx context.Context, interaction *discordgo.Intera
 				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
 				return
 			}
+		case "sshkey":
+			response, err = handleSSHKeyGroupCommand(ctx, userInfo, commandData, rawInteraction)
+			if err != nil {
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Error: handleApplicationCommand: handleSSHKeyCommand: %v", err),
+					Severity: "ERROR",
+				})
+				http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
+				return
+			}
 		default:
 			response = &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
@@ -1119,6 +1129,189 @@ func serverExists(ctx context.Context, name string) bool {
 	return serverDoc.Exists()
 }
 
+func handleSSHKeyGroupCommand(ctx context.Context, userInfo *UserInfo, data discordgo.ApplicationCommandInteractionData, rawInteraction []byte) (*discordgo.InteractionResponse, error) {
+	opts := data.Options
+	subcmd := opts[0]
+	log.Print(LogEntry{
+		Message:  fmt.Sprintf("Subcommand: %v", subcmd.Name),
+		Severity: "INFO",
+	})
+	args := optionsToMap(subcmd.Options)
+	logCommandToWebhook(fmt.Sprintf("%v (%v)", userInfo.DisplayName(), userInfo.ID()), "sshkey", subcmd.Name, args)
+	switch subcmd.Name {
+	case "add":
+		if pass, missing := verifyOpts(args, []string{"user", "name", "sshkey"}); !pass {
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		localUser := args["user"].StringValue()
+		name := args["name"].StringValue()
+		sshkey := args["sshkey"].StringValue()
+
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Add sshkey %v to server %v as %v", localUser, name, sshkey),
+			Severity: "INFO",
+		})
+		allowed, err := permsChecker.CheckServerOp(userInfo.ID(), name, "sshkey")
+		if err != nil {
+			return nil, fmt.Errorf("enforce: %v", err)
+		}
+		if allowed {
+			if !serverExists(ctx, name) {
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Server %v does not exist", name),
+					Severity: "INFO",
+				})
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Server %v does not exist", name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+			// TODO: Use pubsub to add sshkey and defer response
+			pubSubData, err := json.Marshal(ForwardPubSub{
+				Command:     "addsshkey",
+				Interaction: &rawInteraction,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("jsonMarshal: %v", err)
+			}
+			result := commandTopic.Publish(ctx, &pubsub.Message{
+				Data: pubSubData,
+				Attributes: map[string]string{
+					"name":   name,
+					"user":   localUser,
+					"sshkey": sshkey,
+				},
+			})
+			_, err = result.Get(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
+			}
+			log.Print(LogEntry{
+				Message:  "Deferred response",
+				Severity: "INFO",
+			})
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
+				Data: &discordgo.InteractionResponseData{
+					Content: "...",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		} else {
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Operation not authorized",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:  []*discordgo.MessageEmbed{},
+				},
+			}, nil
+		}
+	case "clear":
+		if pass, missing := verifyOpts(args, []string{"name"}); !pass {
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: fmt.Sprintf("Arg %v not specified", missing),
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		}
+		name := args["name"].StringValue()
+
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Clear sshkeys to server %v", name),
+			Severity: "INFO",
+		})
+		allowed, err := permsChecker.CheckServerOp(userInfo.ID(), name, "sshkey")
+		if err != nil {
+			return nil, fmt.Errorf("enforce: %v", err)
+		}
+		if allowed {
+			if !serverExists(ctx, name) {
+				log.Print(LogEntry{
+					Message:  fmt.Sprintf("Server %v does not exist", name),
+					Severity: "INFO",
+				})
+				return &discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: fmt.Sprintf("Server %v does not exist", name),
+						Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					},
+				}, nil
+			}
+			pubSubData, err := json.Marshal(ForwardPubSub{
+				Command:     "clearsshkeys",
+				Interaction: &rawInteraction,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("jsonMarshal: %v", err)
+			}
+			result := commandTopic.Publish(ctx, &pubsub.Message{
+				Data: pubSubData,
+				Attributes: map[string]string{
+					"name": name,
+				},
+			})
+			_, err = result.Get(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("Pubsub.Publish: %v", err)
+			}
+			log.Print(LogEntry{
+				Message:  "Deferred response",
+				Severity: "INFO",
+			})
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseDeferredChannelMessageWithSource, // Deferred response
+				Data: &discordgo.InteractionResponseData{
+					Content: "...",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+				},
+			}, nil
+		} else {
+			log.Print(LogEntry{
+				Message:  "Not authorized",
+				Severity: "INFO",
+			})
+			return &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Operation not authorized",
+					Flags:   uint64(discordgo.MessageFlagsEphemeral),
+					Embeds:  []*discordgo.MessageEmbed{},
+				},
+			}, nil
+		}
+	default:
+		log.Print(LogEntry{
+			Message:  fmt.Sprintf("Command `%v` not implemented for sshkey.", subcmd.Name),
+			Severity: "INFO",
+		})
+		return &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Command `%v` not implemented for sshkey.", subcmd.Name),
+				Flags:   uint64(discordgo.MessageFlagsEphemeral),
+			},
+		}, nil
+	}
+}
+
+// Connect helpers
 type Token struct {
 	Expiration time.Time `json:"expiration" firestore:"expiration"`
 	Id         string    `json:"id" firestore:"id"`
