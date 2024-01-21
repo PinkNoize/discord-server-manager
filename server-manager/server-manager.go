@@ -362,9 +362,9 @@ func CommandPubSub(ctx context.Context, m PubSubMessage) error {
 			return fmt.Errorf("AddSSHKey failed: %v", err)
 		}
 		response.Content = fmt.Sprintf(
-			"Added sshkey %v to %v.",
-			args.SSHKey,
-			args.Name,
+			"Added sshkey %s to %s.",
+			*args.SSHKey,
+			*args.Name,
 		)
 	case "clearsshkeys":
 		args := clearSSHKeyArgs{}
