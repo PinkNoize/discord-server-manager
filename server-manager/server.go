@@ -362,6 +362,7 @@ func (s *server) AddSSHKey(ctx context.Context, user, sshkey string) error {
 	if err != nil {
 		return fmt.Errorf("GetStatus: %v", err)
 	}
+	sshkey = fmt.Sprintf("%s:%s", user, sshkey)
 	switch status {
 	case NEW, READY, STARTINGUP, SAVING:
 		// TODO: Add to running instance
