@@ -17,6 +17,7 @@ import (
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/storage"
 	"github.com/bwmarrin/discordgo"
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/dns/v1"
@@ -478,12 +479,15 @@ func commandStartServer(ctx context.Context, args *startServerArgs) error {
 		return fmt.Errorf("failed to start server %v: %v", *args.Name, err)
 	}
 	// Wait for server to have an IP
-	for i := 0; i < 20; i++ {
+	pollIP := func() error {
 		_, err := server.ServerIP(ctx)
-		if err == nil {
-			break
-		}
-		time.Sleep(1 * time.Second)
+		return err
+	}
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = time.Second * 270
+	err = backoff.Retry(pollIP, b)
+	if err != nil {
+		return fmt.Errorf("failed to poll for IP: %v", err)
 	}
 	err = server.CreateDNSRecord(ctx)
 	if err != nil {

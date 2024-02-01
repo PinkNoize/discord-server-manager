@@ -317,6 +317,7 @@ module "discord_deploy_function" {
   region                = var.region
   function_name         = "discord-deploy-function"
   function_entry_point  = "DiscordCommandDeploy"
+  timeout               = 300
   environment_variables = {
     "PROJECT_ID"       = var.project
     "DISCORD_APPID"    = var.discord_app_id
