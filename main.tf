@@ -292,7 +292,7 @@ module "discord_function" {
 # IAM entry for all users to invoke the function
 resource "google_cloudfunctions_function_iam_member" "invoker" {
   project        = module.discord_function.function.project
-  region         = module.discord_function.function.region
+  region         = module.discord_function.function.location
   cloud_function = module.discord_function.function.name
 
   role   = "roles/cloudfunctions.invoker"
