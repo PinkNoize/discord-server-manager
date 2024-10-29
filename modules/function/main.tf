@@ -63,7 +63,7 @@ resource "google_cloudfunctions2_function" "function" {
 
 # Cloudbuild trigger for function
 resource "google_cloudbuild_trigger" "build-trigger" {
-  name = "${google_cloudfunctions_function.function.name}-trigger"
+  name = "${google_cloudfunctions2_function.function.name}-trigger"
   trigger_template {
     project_id  = var.project
     branch_name = "^${var.branch}$"
@@ -74,7 +74,7 @@ resource "google_cloudbuild_trigger" "build-trigger" {
   build {
     step {
       name    = "gcr.io/google.com/cloudsdktool/cloud-sdk"
-      args    = ["gcloud", "functions", "deploy", "--gen2", "${google_cloudfunctions_function.function.name}", "--region=${google_cloudfunctions_function.function.region}", "--source=${local.repo_url}"]
+      args    = ["gcloud", "functions", "deploy", "--gen2", "${google_cloudfunctions2_function.function.name}", "--region=${google_cloudfunctions2_function.function.region}", "--source=${local.repo_url}"]
       dir     = var.source_dir
       timeout = "600s"
     }
@@ -91,5 +91,5 @@ resource "google_cloudbuild_trigger" "build-trigger" {
 }
 
 output "function" {
-  value = google_cloudfunctions_function.function
+  value = google_cloudfunctions2_function.function
 }
