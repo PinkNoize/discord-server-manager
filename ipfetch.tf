@@ -12,20 +12,20 @@ resource "google_secret_manager_secret" "ip-fetch-key" {
     }
   }
   rotation {
-    rotation_period = "7889238s" # 3 months
+    rotation_period    = "7889238s" # 3 months
     next_rotation_time = timeadd(time_static.create_time.rfc3339, "15m")
   }
   topics {
     # For publication to succeed, the Secret Manager Service Agent service account must have pubsub.publisher permissions on the topic.
     name = google_pubsub_topic.key_rotate_topic.id
   }
-  depends_on  =[
+  depends_on = [
     google_pubsub_topic_iam_member.key-rotate-secret-pubsub-member # service account and mapping must be created first
   ]
   lifecycle {
     ignore_changes = [
-      rotation[0].next_rotation_time,    
-    ]  
+      rotation[0].next_rotation_time,
+    ]
   }
 }
 
@@ -38,31 +38,31 @@ resource "google_service_account" "ip_fetch_service_account" {
 }
 
 resource "google_secret_manager_secret_iam_member" "ip-fetch-member" {
-  project = var.project
+  project   = var.project
   secret_id = google_secret_manager_secret.ip-fetch-key.id
-  role = "roles/secretmanager.secretAccessor"
-  member = "serviceAccount:${google_service_account.ip_fetch_service_account.email}"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.ip_fetch_service_account.email}"
 }
 
 resource "google_project_iam_member" "ip-fetch-firestore-iam" {
   project = var.project
   role    = "roles/datastore.user"
-  member = "serviceAccount:${google_service_account.ip_fetch_service_account.email}"
+  member  = "serviceAccount:${google_service_account.ip_fetch_service_account.email}"
 }
 
 resource "google_pubsub_topic_iam_member" "ip-fetch-pubsub-member" {
   project = google_pubsub_topic.command_topic.project
-  topic = google_pubsub_topic.command_topic.name
-  role = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_service_account.ip_fetch_service_account.email}"
+  topic   = google_pubsub_topic.command_topic.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.ip_fetch_service_account.email}"
 }
 
 module "ip_fetch_function" {
-  source                = "./modules/function"
-  project               = var.project
-  region                = var.region
-  function_name         = "ip-fetch-function"
-  function_entry_point  = "IPFetchEntry"
+  source               = "./modules/function"
+  project              = var.project
+  region               = var.region
+  function_name        = "ip-fetch-function"
+  function_entry_point = "IPFetchEntry"
   environment_variables = {
     "PROJECT_ID"    = var.project
     "COMMAND_TOPIC" = google_pubsub_topic.command_topic.name
@@ -97,18 +97,18 @@ resource "google_service_account" "key_rotate_service_account" {
 }
 
 resource "google_secret_manager_secret_iam_member" "key-rotate-member" {
-  project = var.project
+  project   = var.project
   secret_id = google_secret_manager_secret.ip-fetch-key.id
-  role = "roles/secretmanager.admin"
-  member = "serviceAccount:${google_service_account.key_rotate_service_account.email}"
+  role      = "roles/secretmanager.admin"
+  member    = "serviceAccount:${google_service_account.key_rotate_service_account.email}"
 }
 
 module "key_rotate_function" {
-  source                = "./modules/function"
-  project               = var.project
-  region                = var.region
-  function_name         = "key-rotate-function"
-  function_entry_point  = "KeyRotatePubSub"
+  source               = "./modules/function"
+  project              = var.project
+  region               = var.region
+  function_name        = "key-rotate-function"
+  function_entry_point = "KeyRotatePubSub"
   environment_variables = {
     "PROJECT_ID"    = var.project
     "KEY_SECRET_ID" = google_secret_manager_secret.ip-fetch-key.id
@@ -118,7 +118,7 @@ module "key_rotate_function" {
   source_dir            = "key-rotate-function"
   service_account_email = google_service_account.key_rotate_service_account.email
   event_type            = "google.pubsub.topic.publish"
-  event_resource        = "${google_pubsub_topic.key_rotate_topic.id}"
+  pubsub_topic          = google_pubsub_topic.key_rotate_topic.id
 }
 
 resource "google_project_service_identity" "sc_sa" {
@@ -130,7 +130,7 @@ resource "google_project_service_identity" "sc_sa" {
 
 resource "google_pubsub_topic_iam_member" "key-rotate-secret-pubsub-member" {
   project = google_pubsub_topic.key_rotate_topic.project
-  topic = google_pubsub_topic.key_rotate_topic.name
-  role = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_project_service_identity.sc_sa.email}"
+  topic   = google_pubsub_topic.key_rotate_topic.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_project_service_identity.sc_sa.email}"
 }
