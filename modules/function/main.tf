@@ -74,7 +74,7 @@ resource "google_cloudbuild_trigger" "build-trigger" {
   build {
     step {
       name    = "gcr.io/google.com/cloudsdktool/cloud-sdk"
-      args    = ["gcloud", "functions", "deploy", "--gen2", "${google_cloudfunctions2_function.function.name}", "--region=${google_cloudfunctions2_function.function.region}", "--source=${local.repo_url}"]
+      args    = ["gcloud", "functions", "deploy", "--gen2", "${google_cloudfunctions2_function.function.name}", "--region=${google_cloudfunctions2_function.function.location}", "--source=${local.repo_url}"]
       dir     = var.source_dir
       timeout = "600s"
     }
