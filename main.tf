@@ -277,7 +277,7 @@ module "discord_function" {
     "COMMAND_TOPIC"    = google_pubsub_topic.command_topic.name
     "ADMIN_DISCORD_ID" = var.admin_discord_id
     "DISCORD_PUBKEY"   = var.discord_pubkey
-    "IP_FETCH_URL"     = module.ip_fetch_function.function.https_trigger_url
+    "IP_FETCH_URL"     = module.ip_fetch_function.function.url
     "KEY_SECRET_ID"    = google_secret_manager_secret.ip-fetch-key.id
     "LOG_WEBHOOK_URL"  = var.webhook_log
   }
@@ -373,5 +373,5 @@ module "snapshot_function" {
   service_account_email = google_service_account.snapshot_account.email
   event_type            = "google.pubsub.topic.publish"
   pubsub_topic          = google_pubsub_topic.snapshot_topic.id
-  retry_on_failure      = true
+  retry_policy          = "RETRY_POLICY_DO_NOT_RETRY"
 }

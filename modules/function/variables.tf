@@ -21,8 +21,8 @@ variable "event_type" {
 variable "pubsub_topic" {
   default = null
 }
-variable "retry_on_failure" {
-  default = false
+variable "retry_policy" {
+  default = "RETRY_POLICY_DO_NOT_RETRY"
 }
 variable "ingress_settings" {
   default = null

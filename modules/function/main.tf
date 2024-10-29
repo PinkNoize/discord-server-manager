@@ -52,7 +52,7 @@ resource "google_cloudfunctions2_function" "function" {
     content {
       event_type   = var.event_type
       pubsub_topic = var.pubsub_topic
-      retry_policy = var.retry_on_failure
+      retry_policy = var.retry_policy
     }
   }
   # idk if I still need this
