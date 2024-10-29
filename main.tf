@@ -214,7 +214,7 @@ module "command_function" {
   branch                = "main"
   source_dir            = "server-manager"
   service_account_email = google_service_account.service_account.email
-  event_type            = "google.pubsub.topic.publish"
+  event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
   pubsub_topic          = google_pubsub_topic.command_topic.id
   timeout               = 120
 }
@@ -371,7 +371,7 @@ module "snapshot_function" {
   branch                = "main"
   source_dir            = "snapshot-function"
   service_account_email = google_service_account.snapshot_account.email
-  event_type            = "google.pubsub.topic.publish"
+  event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
   pubsub_topic          = google_pubsub_topic.snapshot_topic.id
   retry_policy          = "RETRY_POLICY_DO_NOT_RETRY"
 }

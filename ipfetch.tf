@@ -117,7 +117,7 @@ module "key_rotate_function" {
   branch                = "main"
   source_dir            = "key-rotate-function"
   service_account_email = google_service_account.key_rotate_service_account.email
-  event_type            = "google.pubsub.topic.publish"
+  event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
   pubsub_topic          = google_pubsub_topic.key_rotate_topic.id
 }
 
