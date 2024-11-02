@@ -5,7 +5,7 @@ terraform {
       version = "5.10.0"
     }
     random = {
-      source = "hashicorp/random"
+      source  = "hashicorp/random"
       version = "3.1.0"
     }
   }
@@ -21,7 +21,7 @@ provider "google" {
 }
 
 provider "google" {
-  alias = "dns"
+  alias   = "dns"
   project = var.dns_project_id
 }
 
@@ -91,14 +91,14 @@ resource "google_project_service_identity" "cb_sa" {
 
 resource "google_project_iam_member" "cloudbuild-cf-member" {
   project = google_project_service_identity.cb_sa.project
-  role = "roles/cloudfunctions.developer"
-  member = "serviceAccount:${google_project_service_identity.cb_sa.email}"
+  role    = "roles/cloudfunctions.developer"
+  member  = "serviceAccount:${google_project_service_identity.cb_sa.email}"
 }
 
 resource "google_project_iam_member" "cloudbuild-sa-member" {
   project = google_project_service_identity.cb_sa.project
-  role = "roles/iam.serviceAccountUser"
-  member = "serviceAccount:${google_project_service_identity.cb_sa.email}"
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_project_service_identity.cb_sa.email}"
 }
 
 # Discord API secret
@@ -117,7 +117,7 @@ resource "google_secret_manager_secret" "secret-basic" {
 # Cloud Function Resources
 
 resource "random_id" "id" {
-	  byte_length = 8
+  byte_length = 8
 }
 
 resource "google_pubsub_topic" "command_topic" {
@@ -129,10 +129,10 @@ resource "google_project_iam_custom_role" "command_func_svc_create_role" {
   title       = "Command Func Role"
   description = ""
   permissions = ["resourcemanager.projects.getIamPolicy",
-                 "resourcemanager.projects.setIamPolicy",
-                 "iam.serviceAccounts.get",
-                 "iam.serviceAccounts.create",
-                 "iam.serviceAccounts.delete"]
+    "resourcemanager.projects.setIamPolicy",
+    "iam.serviceAccounts.get",
+    "iam.serviceAccounts.create",
+  "iam.serviceAccounts.delete"]
 }
 
 resource "google_service_account" "service_account" {
@@ -143,13 +143,13 @@ resource "google_service_account" "service_account" {
 resource "google_project_iam_member" "custom-role-iam" {
   project = var.project
   role    = google_project_iam_custom_role.command_func_svc_create_role.id
-  member = "serviceAccount:${google_service_account.service_account.email}"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 resource "google_project_iam_member" "firestore-iam" {
   project = var.project
   role    = "roles/datastore.user"
-  member = "serviceAccount:${google_service_account.service_account.email}"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 resource "google_project_iam_member" "compute-iam" {
@@ -171,10 +171,10 @@ resource "google_project_iam_member" "sa-compute-iam" {
 }
 
 resource "google_secret_manager_secret_iam_member" "command-member" {
-  project = var.project
+  project   = var.project
   secret_id = google_secret_manager_secret.secret-basic.id
-  role = "roles/secretmanager.secretAccessor"
-  member = "serviceAccount:${google_service_account.service_account.email}"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 # Add permissions to access DNS project
@@ -188,17 +188,17 @@ resource "google_project_iam_binding" "dns-iam" {
 # Add pub/sub publisher
 resource "google_pubsub_topic_iam_member" "command-member" {
   project = google_pubsub_topic.snapshot_topic.project
-  topic = google_pubsub_topic.snapshot_topic.name
-  role = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_service_account.service_account.email}"
+  topic   = google_pubsub_topic.snapshot_topic.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.service_account.email}"
 }
 
 module "command_function" {
-  source                = "./modules/function"
-  project               = var.project
-  region                = var.region
-  function_name         = "command-function"
-  function_entry_point  = "CommandPubSub"
+  source               = "./modules/function"
+  project              = var.project
+  region               = var.region
+  function_name        = "command-function"
+  function_entry_point = "CommandPubSub"
   environment_variables = {
     "PROJECT_ID"        = var.project
     "PROJECT_REGION"    = var.region
@@ -214,8 +214,8 @@ module "command_function" {
   branch                = "main"
   source_dir            = "server-manager"
   service_account_email = google_service_account.service_account.email
-  event_type            = "google.pubsub.topic.publish"
-  event_resource        = "${google_pubsub_topic.command_topic.id}"
+  event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
+  pubsub_topic          = google_pubsub_topic.command_topic.id
   timeout               = 120
 }
 
@@ -243,41 +243,41 @@ resource "google_service_account" "discord_service_account" {
 resource "google_project_iam_member" "discord-custom-role-iam" {
   project = var.project
   role    = google_project_iam_custom_role.discord_func_role.id
-  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+  member  = "serviceAccount:${google_service_account.discord_service_account.email}"
 }
 
 resource "google_project_iam_member" "discord-firestore-iam" {
   project = var.project
   role    = "roles/datastore.user"
-  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+  member  = "serviceAccount:${google_service_account.discord_service_account.email}"
 }
 
 resource "google_pubsub_topic_iam_member" "member" {
   project = google_pubsub_topic.command_topic.project
-  topic = google_pubsub_topic.command_topic.name
-  role = "roles/pubsub.publisher"
-  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+  topic   = google_pubsub_topic.command_topic.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.discord_service_account.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "discord-function-member" {
-  project = var.project
+  project   = var.project
   secret_id = google_secret_manager_secret.ip-fetch-key.id
-  role = "roles/secretmanager.secretAccessor"
-  member = "serviceAccount:${google_service_account.discord_service_account.email}"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.discord_service_account.email}"
 }
 
 module "discord_function" {
-  source                = "./modules/function"
-  project               = var.project
-  region                = var.region
-  function_name         = "discord-function"
-  function_entry_point  = "DiscordFunctionEntry"
+  source               = "./modules/function"
+  project              = var.project
+  region               = var.region
+  function_name        = "discord-function"
+  function_entry_point = "DiscordFunctionEntry"
   environment_variables = {
     "PROJECT_ID"       = var.project
     "COMMAND_TOPIC"    = google_pubsub_topic.command_topic.name
     "ADMIN_DISCORD_ID" = var.admin_discord_id
     "DISCORD_PUBKEY"   = var.discord_pubkey
-    "IP_FETCH_URL"     = module.ip_fetch_function.function.https_trigger_url
+    "IP_FETCH_URL"     = module.ip_fetch_function.function.url
     "KEY_SECRET_ID"    = google_secret_manager_secret.ip-fetch-key.id
     "LOG_WEBHOOK_URL"  = var.webhook_log
   }
@@ -292,7 +292,7 @@ module "discord_function" {
 # IAM entry for all users to invoke the function
 resource "google_cloudfunctions_function_iam_member" "invoker" {
   project        = module.discord_function.function.project
-  region         = module.discord_function.function.region
+  region         = module.discord_function.function.location
   cloud_function = module.discord_function.function.name
 
   role   = "roles/cloudfunctions.invoker"
@@ -306,22 +306,22 @@ resource "google_service_account" "discord_deploy_service_account" {
 }
 
 resource "google_secret_manager_secret_iam_member" "discord-deploy-member" {
-  project = var.project
+  project   = var.project
   secret_id = google_secret_manager_secret.secret-basic.id
-  role = "roles/secretmanager.secretAccessor"
-  member = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.discord_deploy_service_account.email}"
 }
 
 module "discord_deploy_function" {
-  source                = "./modules/function"
-  project               = var.project
-  region                = var.region
-  function_name         = "discord-deploy-function"
-  function_entry_point  = "DiscordCommandDeploy"
-  timeout               = 300
+  source               = "./modules/function"
+  project              = var.project
+  region               = var.region
+  function_name        = "discord-deploy-function"
+  function_entry_point = "DiscordCommandDeploy"
+  timeout              = 300
   environment_variables = {
-    "PROJECT_ID"       = var.project
-    "DISCORD_APPID"    = var.discord_app_id
+    "PROJECT_ID"        = var.project
+    "DISCORD_APPID"     = var.discord_app_id
     "DISCORD_SECRET_ID" = google_secret_manager_secret.secret-basic.id
   }
   repository            = var.repository
@@ -346,7 +346,7 @@ resource "google_service_account" "snapshot_account" {
 resource "google_project_iam_member" "snapshot-firestore-iam" {
   project = var.project
   role    = "roles/datastore.user"
-  member = "serviceAccount:${google_service_account.snapshot_account.email}"
+  member  = "serviceAccount:${google_service_account.snapshot_account.email}"
 }
 
 resource "google_project_iam_member" "snapshot-compute-iam" {
@@ -356,22 +356,22 @@ resource "google_project_iam_member" "snapshot-compute-iam" {
 }
 
 module "snapshot_function" {
-  source                = "./modules/function"
-  project               = var.project
-  region                = var.region
-  function_name         = "snapshot-function"
-  function_entry_point  = "SnapshotPubSub"
-  timeout = 540
+  source               = "./modules/function"
+  project              = var.project
+  region               = var.region
+  function_name        = "snapshot-function"
+  function_entry_point = "SnapshotPubSub"
+  timeout              = 540
   environment_variables = {
-    "PROJECT_ID"        = var.project
-    "PROJECT_REGION"    = var.region
-    "PROJECT_ZONE"      = var.zone
+    "PROJECT_ID"     = var.project
+    "PROJECT_REGION" = var.region
+    "PROJECT_ZONE"   = var.zone
   }
   repository            = var.repository
   branch                = "main"
   source_dir            = "snapshot-function"
   service_account_email = google_service_account.snapshot_account.email
-  event_type            = "google.pubsub.topic.publish"
-  event_resource        = "${google_pubsub_topic.snapshot_topic.id}"
-  retry_on_failure      = true
+  event_type            = "google.cloud.pubsub.topic.v1.messagePublished"
+  pubsub_topic          = google_pubsub_topic.snapshot_topic.id
+  retry_policy          = "RETRY_POLICY_DO_NOT_RETRY"
 }

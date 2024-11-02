@@ -7,26 +7,26 @@ variable "repository" {}
 variable "branch" {}
 variable "environment_variables" {}
 variable "service_account_email" {
-    default = null
+  default = null
 }
 variable "trigger_http" {
-    default = null
+  default = null
 }
 variable "event_trigger" {
-    default = null
+  default = null
 }
 variable "event_type" {
-    default = null
+  default = null
 }
-variable "event_resource" {
-    default = null
+variable "pubsub_topic" {
+  default = null
 }
-variable "retry_on_failure" {
-    default = false
+variable "retry_policy" {
+  default = "RETRY_POLICY_DO_NOT_RETRY"
 }
 variable "ingress_settings" {
-    default = null
+  default = null
 }
 variable "timeout" {
-    default = 60
+  default = 60
 }

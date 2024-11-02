@@ -21,56 +21,61 @@ locals {
 }
 
 # Create Cloud Function
-resource "google_cloudfunctions_function" "function" {
-  name    = var.function_name
-  region  = var.region
-  runtime = "go121"
-  docker_registry = "ARTIFACT_REGISTRY"
-  timeout = var.timeout
+resource "google_cloudfunctions2_function" "function" {
+  name     = var.function_name
+  location = var.region
 
-  available_memory_mb   = 128
-  source_repository {
-    url = local.repo_url
-  }
-  trigger_http          = var.trigger_http
-  ingress_settings      = var.ingress_settings
-  entry_point           = var.function_entry_point
-  environment_variables = var.environment_variables
-  service_account_email = var.service_account_email
-  dynamic "event_trigger" {
-    
-     for_each = var.trigger_http == true ? toset([]) : toset([1])
-    
-    content {
-      event_type = var.event_type
-      resource   = var.event_resource
-      failure_policy {
-        retry = var.retry_on_failure
+  build_config {
+    runtime     = "go121"
+    entry_point = var.function_entry_point
+    source {
+      repo_source {
+        project_id  = var.project
+        repo_name   = var.repository
+        branch_name = var.branch
+        dir         = var.source_dir
       }
     }
   }
-  lifecycle {
-    ignore_changes = [
-      labels,    
-    ]  
+
+  service_config {
+    timeout_seconds       = var.timeout
+    available_memory      = "128Mi"
+    environment_variables = var.environment_variables
+    service_account_email = var.service_account_email
+    ingress_settings      = var.ingress_settings
   }
+  dynamic "event_trigger" {
+
+    for_each = var.trigger_http == true ? toset([]) : toset([1])
+
+    content {
+      event_type   = var.event_type
+      pubsub_topic = var.pubsub_topic
+      retry_policy = var.retry_policy
+    }
+  }
+  # idk if I still need this
+  #lifecycle {
+  #  ignore_changes = [ labels ]
+  #}
 }
 
 # Cloudbuild trigger for function
 resource "google_cloudbuild_trigger" "build-trigger" {
-  name = "${google_cloudfunctions_function.function.name}-trigger"
+  name = "${google_cloudfunctions2_function.function.name}-trigger"
   trigger_template {
     project_id  = var.project
     branch_name = "^${var.branch}$"
     repo_name   = var.repository
     dir         = var.source_dir
   }
-  included_files = [ "${var.source_dir}/**" ]
+  included_files = ["${var.source_dir}/**"]
   build {
     step {
-      name = "gcr.io/google.com/cloudsdktool/cloud-sdk"
-      args = ["gcloud", "functions", "deploy", "${google_cloudfunctions_function.function.name}", "--region=${google_cloudfunctions_function.function.region}", "--source=${local.repo_url}"]
-      dir  = var.source_dir
+      name    = "gcr.io/google.com/cloudsdktool/cloud-sdk"
+      args    = ["gcloud", "functions", "deploy", "--gen2", "${google_cloudfunctions2_function.function.name}", "--region=${google_cloudfunctions2_function.function.location}", "--source=${local.repo_url}"]
+      dir     = var.source_dir
       timeout = "600s"
     }
 
@@ -86,5 +91,5 @@ resource "google_cloudbuild_trigger" "build-trigger" {
 }
 
 output "function" {
-  value = google_cloudfunctions_function.function
+  value = google_cloudfunctions2_function.function
 }
