@@ -40,7 +40,7 @@ resource "google_cloudfunctions2_function" "function" {
 
   service_config {
     timeout_seconds       = var.timeout
-    available_memory      = "128M"
+    available_memory      = "128Mi"
     environment_variables = var.environment_variables
     service_account_email = var.service_account_email
     ingress_settings      = var.ingress_settings
